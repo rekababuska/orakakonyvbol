@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="hu">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Color Guessing Game</title>
+    <title>Színkitaláló Játék</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -47,11 +47,11 @@
     <div class="w-full max-w-2xl bg-zinc-800 p-8 rounded-2xl shadow-xl flex flex-col items-center space-y-8">
         <div class="flex items-center space-x-4 mb-4">
             <button id="prevTaskBtn" class="bg-zinc-700 hover:bg-zinc-600 text-zinc-50 py-2 px-4 rounded-xl transition-colors duration-200 shadow-md">
-                Previous
+                Előző
             </button>
             <span id="taskNumber" class="text-3xl font-bold text-zinc-300">1</span>
             <button id="nextTaskBtn" class="bg-zinc-700 hover:bg-zinc-600 text-zinc-50 py-2 px-4 rounded-xl transition-colors duration-200 shadow-md">
-                Next
+                Következő
             </button>
         </div>
 
@@ -59,27 +59,27 @@
             <h1 class="text-xl md:text-2xl font-semibold text-zinc-200">Add meg a képen látható szín színkódját!</h1>
             
             <div class="flex items-center justify-center space-x-2">
-                <input type="text" id="seedInput" class="text-zinc-900 text-center w-40 p-2 rounded-lg font-mono tracking-wider" placeholder="Enter a code to get a color">
+                <input type="text" id="seedInput" class="text-zinc-900 text-center w-40 p-2 rounded-lg font-mono tracking-wider" placeholder="Kód">
                 <button id="seedBtn" class="bg-zinc-700 hover:bg-zinc-600 text-zinc-50 py-2 px-4 rounded-xl transition-colors duration-200 shadow-md">
-                    Go!
+                    Mehet!
                 </button>
             </div>
 
             <div class="flex flex-col md:flex-row items-center justify-center space-y-6 md:space-y-0 md:space-x-8">
                 <div class="flex flex-col items-center space-y-2">
                     <div id="targetColor" class="w-32 h-32 md:w-40 md:h-40 rounded-xl border-4 border-zinc-700 shadow-lg"></div>
-                    <span class="text-sm text-zinc-400">Target color</span>
+                    <span class="text-sm text-zinc-400">Célszín</span>
                 </div>
                 
                 <div class="flex flex-col items-center space-y-4">
                     <input type="text" id="hexInput" class="text-zinc-900 text-center w-40 p-2 rounded-lg font-mono tracking-wider focus:ring-2 focus:ring-zinc-600 transition-shadow duration-200" placeholder="#RRGGBB" maxlength="7">
                     <div id="guessColor" class="w-32 h-32 md:w-40 md:h-40 rounded-xl border-4 border-zinc-700 shadow-lg"></div>
-                    <span class="text-sm text-zinc-400">Your guess</span>
+                    <span class="text-sm text-zinc-400">Tipped</span>
                 </div>
             </div>
             
             <p id="guessCounter" class="text-zinc-400 font-medium text-lg mt-2">
-                Guesses left: 3
+                Hátralévő tippek: 3
             </p>
             
             <p id="distanceOutput" class="text-zinc-300 font-medium text-lg mt-2 hidden">
@@ -131,7 +131,7 @@
             const targetHexCodeDiv = document.getElementById('targetHexCode');
             const colorPaletteDiv = document.getElementById('colorPalette');
             const feedback2Div = document.getElementById('feedback2');
-            const resetTask2Btn = document.getElementById('resetTask2Btn'); // NEW
+            const resetTask2Btn = document.getElementById('resetTask2Btn');
 
             // State
             let state = {
@@ -149,6 +149,7 @@
                 const c = 1013904223;
                 const m = 4294967296; // 2^32
                 s = (a * s + c) % m;
+                currentSeed = s; // Update the seed for the next call
                 return s / m;
             }
 
@@ -189,29 +190,29 @@
             }
 
             // Task Logic Functions
-            function setupTask1() {
-                // Generate a random color for the default game experience.
-                state.targetHex1 = generateRandomHex();
-                currentSeed = null; // Reset seed for new random game
+            function setupTask1(isNewGame = true) {
+                 if (isNewGame) {
+                    state.targetHex1 = generateRandomHex();
+                    currentSeed = null;
+                }
                 
+                state.guessCount1 = 0;
                 targetColorDiv.style.backgroundColor = state.targetHex1;
                 hexInput.value = '';
                 hexInput.disabled = false;
                 guessColorDiv.style.backgroundColor = '#ffffff';
                 distanceOutput.classList.add('hidden');
                 correctCodeOutput.classList.add('hidden');
-                guessCounterSpan.textContent = `Guesses left: ${3 - state.guessCount1}`;
+                guessCounterSpan.textContent = `Hátralévő tippek: ${3 - state.guessCount1}`;
             }
 
             function setupTask2() {
-                // Ensure Task 2 uses a truly random color
                 state.targetHex2 = generateRandomHex();
                 targetHexCodeDiv.textContent = state.targetHex2.toUpperCase();
                 
                 feedback2Div.textContent = '';
                 feedback2Div.classList.remove('text-green-400', 'text-red-400');
                 
-                // Generate color alternatives with a greater difference
                 const allColors = [state.targetHex2];
                 const targetRgb = hexToRgb(state.targetHex2);
                 let attempts = 0;
@@ -230,14 +231,12 @@
                     attempts++;
                 }
 
-                // Fallback to simpler random colors if finding distant ones is too hard
                 while (allColors.length < 6) {
                     allColors.push(generateRandomHex());
                 }
 
                 shuffleArray(allColors);
 
-                // Display the color palette
                 colorPaletteDiv.innerHTML = '';
                 allColors.forEach(color => {
                     const colorDiv = document.createElement('div');
@@ -247,7 +246,6 @@
                     colorPaletteDiv.appendChild(colorDiv);
                 });
                 
-                // Re-enable clicks
                 colorPaletteDiv.querySelectorAll('.color-palette-item').forEach(item => item.style.pointerEvents = 'auto');
             }
 
@@ -285,12 +283,12 @@
                 const value = event.target.value.trim().toUpperCase();
                 
                 if (state.guessCount1 >= 3) {
-                    return; // Stop if max guesses reached
+                    return;
                 }
 
                 if (/^#[0-9A-F]{6}$/.test(value)) {
                     state.guessCount1++;
-                    guessCounterSpan.textContent = `Guesses left: ${3 - state.guessCount1}`;
+                    guessCounterSpan.textContent = `Hátralévő tippek: ${3 - state.guessCount1}`;
                     
                     guessColorDiv.style.backgroundColor = value;
                     distanceOutput.classList.remove('hidden');
@@ -317,7 +315,6 @@
                 }
             });
 
-            // NEW: Seed input listener
             seedBtn.addEventListener('click', () => {
                 let input = seedInput.value.trim();
                 let newSeed;
@@ -331,26 +328,17 @@
                 
                 currentSeed = newSeed;
                 state.targetHex1 = generateRandomHex(true);
-                targetColorDiv.style.backgroundColor = state.targetHex1;
-                hexInput.value = '';
-                hexInput.disabled = false;
-                guessColorDiv.style.backgroundColor = '#ffffff';
-                distanceOutput.classList.add('hidden');
-                correctCodeOutput.classList.add('hidden');
-                guessCounterSpan.textContent = `Guesses left: ${3}`;
+                setupTask1(false); // Use false to indicate we are not generating a new random color, but using the seeded one.
                 seedInput.value = '';
             });
 
-            // Task 2 Reset Button Listener
             resetTask2Btn.addEventListener('click', () => {
                 setupTask2();
             });
             
-            // Task 2 Event Listener
             colorPaletteDiv.addEventListener('click', (event) => {
                 const clickedColor = event.target.getAttribute('data-color');
                 if (clickedColor) {
-                    // Disable further clicks
                     colorPaletteDiv.querySelectorAll('.color-palette-item').forEach(item => item.style.pointerEvents = 'none');
 
                     if (clickedColor.toUpperCase() === state.targetHex2.toUpperCase()) {
