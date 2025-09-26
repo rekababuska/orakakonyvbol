@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vonalkód Feladat</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            background-color: #f0f0f0;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            text-align: center;
+            background-color: #fff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #111;
+            font-size: 2.2em;
+            margin-bottom: 30px;
+        }
+
+        .barcode-main-display {
+            display: flex;
+            align-items: flex-start; /* All barcode bars align at the top */
+            margin-bottom: 40px;
+            background-color: #fff;
+            padding: 20px 0;
+            border-radius: 5px;
+            overflow: hidden;
+            justify-content: center;
+        }
+
+        .barcode-digit-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0 2px;
+        }
+
+        .barcode-bars-container {
+            display: flex;
+            height: 100px; /* Container height to accommodate the longest bar */
+            align-items: flex-start; /* Ensure bars start at the top of their container */
+        }
+        
+        .barcode-bar {
+            width: 2.5px;
+            background-color: #000;
+        }
+        .barcode-space {
+            width: 2.5px;
+            background-color: #fff;
+        }
+        
+        /* Define heights for different bar types, aligned at the top */
+        .bar-normal { height: 90px; }
+        .bar-long { height: 100px; }
+
+        .digit-label {
+            margin-top: 8px;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #222;
+        }
+        
+        .torn-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 90px; /* Aligned with number-decoding bars height */
+            width: calc(2.5px * 7);
+            margin: 0 2px;
+            background-color: #f5f5f5;
+            border: 3px dashed #999;
+            border-radius: 5px;
+            box-sizing: border-box;
+            cursor: pointer;
+        }
+        .torn-section:hover {
+            border-color: #555;
+        }
+
+        .options-container {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr); /* 3 options per row */
+            gap: 30px; /* Increased gap between options */
+            margin-top: 40px;
+            max-width: 1000px; /* Adjusted max-width to accommodate larger options */
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .option {
+            background-color: #e0e0e0;
+            color: #333;
+            padding: 25px; /* Increased padding for bigger options */
+            border-radius: 8px;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: border-color 0.3s, transform 0.2s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            min-height: 120px; /* Ensure options are tall enough to contain larger barcodes */
+            box-sizing: border-box; /* Include padding in element's total width and height */
+        }
+
+        .option:hover {
+            border-color: #b0b0b0;
+            transform: translateY(-2px);
+        }
+
+        .option.selected-correct {
+            border-color: #28a745;
+        }
+
+        .option.selected-incorrect {
+            border-color: #dc3545;
+        }
+        
+        .feedback {
+            margin-top: 40px;
+            font-size: 2em;
+            font-weight: bold;
+            min-height: 2em;
+        }
+        
+        .correct {
+            color: #28a745;
+        }
+
+        .incorrect {
+            color: #dc3545;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Válaszd ki a hiányzó vonalkód részletet!</h1>
+        <div class="barcode-main-display" id="barcode-container">
+            </div>
+        <div class="options-container" id="options-container">
+            </div>
+        <div class="feedback" id="feedback-message"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            const upcAPatterns = {
+                L: {
+                    '0': '0001101', '1': '0011001', '2': '0010011', '3': '0111101', '4': '0100011',
+                    '5': '0110001', '6': '0101111', '7': '0111011', '8': '0110111', '9': '0001011'
+                },
+                R: {
+                    '0': '1110010', '1': '1100110', '2': '1101100', '3': '1000010', '4': '1011100',
+                    '5': '1001110', '6': '1010000', '7': '1000100', '8': '1001000', '9': '1110100'
+                }
+            };
+            const guardPatterns = {
+                start: '101',
+                middle: '01010',
+                end: '101'
+            };
+
+            const barcodeContainer = document.getElementById('barcode-container');
+            const optionsContainer = document.getElementById('options-container');
+            const feedbackMessage = document.getElementById('feedback-message');
+
+            let correctDigit = '';
+            let correctPartHtml = '';
+            let fullBarcodeCode = '';
+            let missingIndex = -1;
+            let missingPatternType = '';
+
+            function generateBarcodePart(digit, patternType, parentType = 'main') {
+                const pattern = upcAPatterns[patternType][digit];
+                let barsHtml = '';
+                const barHeightClass = 'bar-normal';
+
+                for (let i = 0; i < pattern.length; i++) {
+                    barsHtml += `<div class="${pattern[i] === '1' ? 'barcode-bar' : 'barcode-space'} ${barHeightClass}"></div>`;
+                }
+                
+                const digitLabelHtml = parentType === 'main' ? `<div class="digit-label">${digit}</div>` : '';
+
+                return `
+                    <div class="barcode-digit-group">
+                        <div class="barcode-bars-container">${barsHtml}</div>
+                        ${digitLabelHtml}
+                    </div>`;
+            }
+            
+            function generateGuardBars(pattern, type) {
+                let barsHtml = '';
+                const barHeightType = 'bar-long';
+                
+                for (let i = 0; i < pattern.length; i++) {
+                    barsHtml += `<div class="${pattern[i] === '1' ? 'barcode-bar' : 'barcode-space'} ${barHeightType}"></div>`;
+                }
+                return `<div class="barcode-digit-group"><div class="barcode-bars-container">${barsHtml}</div></div>`;
+            }
+
+            function generateTornSection() {
+                return `<div class="torn-section"></div>`;
+            }
+
+            function calculateCheckDigit(code) {
+                let oddSum = 0;
+                let evenSum = 0;
+                for (let i = 0; i < 11; i++) {
+                    const digit = parseInt(code[i]);
+                    if ((i + 1) % 2 !== 0) {
+                        oddSum += digit;
+                    } else {
+                        evenSum += digit;
+                    }
+                }
+                const totalSum = (oddSum * 3) + evenSum;
+                const remainder = totalSum % 10;
+                return remainder === 0 ? 0 : 10 - remainder;
+            }
+
+            function generateFullUpcCode() {
+                let code = '';
+                for (let i = 0; i < 11; i++) {
+                    code += Math.floor(Math.random() * 10);
+                }
+                const checkDigit = calculateCheckDigit(code);
+                code += checkDigit;
+                return code;
+            }
+
+            function renderBarcode(code, missingIdx, missingPart) {
+                barcodeContainer.innerHTML = '';
+                barcodeContainer.innerHTML += generateGuardBars(guardPatterns.start, 'start');
+
+                for (let i = 0; i < code.length; i++) {
+                    const patternType = i < 6 ? 'L' : 'R';
+                    if (i === missingIdx) {
+                         if (missingPart) {
+                            barcodeContainer.innerHTML += generateBarcodePart(code[i], patternType, 'main');
+                         } else {
+                            barcodeContainer.innerHTML += generateTornSection();
+                         }
+                    } else {
+                        barcodeContainer.innerHTML += generateBarcodePart(code[i], patternType);
+                    }
+                    if (i === 5) {
+                        barcodeContainer.innerHTML += generateGuardBars(guardPatterns.middle, 'middle');
+                    }
+                }
+                barcodeContainer.innerHTML += generateGuardBars(guardPatterns.end, 'end');
+            }
+
+            function generateAndDisplayProblem() {
+                fullBarcodeCode = generateFullUpcCode();
+                missingIndex = Math.floor(Math.random() * 12);
+                correctDigit = fullBarcodeCode[missingIndex];
+                missingPatternType = missingIndex < 6 ? 'L' : 'R';
+                
+                correctPartHtml = generateBarcodePart(correctDigit, missingPatternType, 'option'); 
+                
+                renderBarcode(fullBarcodeCode, missingIndex, null);
+                generateOptions();
+                feedbackMessage.textContent = '';
+            }
+            
+            function generateOptions() {
+                optionsContainer.innerHTML = '';
+                let options = [];
+                
+                options.push({ digit: correctDigit, patternType: missingPatternType, isCorrect: true });
+                
+                while (options.length < 6) {
+                    let randomDigit = Math.floor(Math.random() * 10).toString();
+                    if (randomDigit !== correctDigit) {
+                        options.push({ digit: randomDigit, patternType: missingPatternType, isCorrect: false });
+                    }
+                }
+                
+                options.sort(() => Math.random() - 0.5);
+
+                options.forEach(option => {
+                    const div = document.createElement('div');
+                    div.className = 'option';
+                    div.innerHTML = generateBarcodePart(option.digit, option.patternType, 'option');
+                    div.dataset.isCorrect = option.isCorrect;
+                    div.addEventListener('click', handleOptionClick);
+                    optionsContainer.appendChild(div);
+                });
+            }
+
+            function handleOptionClick(event) {
+                const clickedOption = event.currentTarget;
+                const isCorrect = clickedOption.dataset.isCorrect === 'true';
+
+                // First, remove any previous selections and feedback
+                document.querySelectorAll('.option').forEach(option => {
+                    option.classList.remove('selected-correct', 'selected-incorrect');
+                });
+                feedbackMessage.textContent = '';
+
+                if (isCorrect) {
+                    clickedOption.classList.add('selected-correct');
+                    setTimeout(() => {
+                        feedbackMessage.textContent = 'Helyes megoldás. 🎉';
+                        feedbackMessage.className = 'feedback correct';
+                        renderBarcode(fullBarcodeCode, missingIndex, true);
+                        optionsContainer.innerHTML = '';
+                        setTimeout(generateAndDisplayProblem, 3000);
+                    }, 750);
+                } else {
+                    clickedOption.classList.add('selected-incorrect');
+                    setTimeout(() => {
+                        feedbackMessage.textContent = 'Próbáld újra! ❌';
+                        feedbackMessage.className = 'feedback incorrect';
+                    }, 500);
+                }
+            }
+
+            generateAndDisplayProblem();
+        });
+    </script>
+</body>
+</html>
