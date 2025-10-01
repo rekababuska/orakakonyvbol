@@ -198,9 +198,9 @@
         <h1>Válaszd ki a hiányzó vonalkód részletet!</h1>
         
         <div class="task-code-container">
-            <input type="number" id="task-code-input" placeholder="Enter task code (integer)">
-            <button id="generate-from-code">Generate Task</button>
-            <p>Current Task Code: <strong id="current-task-code">N/A</strong></p>
+            <input type="number" id="task-code-input" placeholder="Írd be a feladatkódot">
+            <button id="generate-from-code">Feladat Generálása</button>
+            <p>Kód: <strong id="current-task-code">N/A</strong></p>
         </div>
 
         <div class="barcode-main-display" id="barcode-container"></div>
@@ -224,13 +224,10 @@
             const generateFromCodeBtn = document.getElementById('generate-from-code');
             const currentTaskCodeSpan = document.getElementById('current-task-code');
             
-            // Global variables for the current task
             let fullBarcodeCode = '';
             let missingIndex = -1;
             let missingPatternType = '';
             
-            // NEW: A simple seedable pseudo-random number generator (PRNG)
-            // This allows tasks to be reproduced from a single integer seed.
             function mulberry32(a) {
                 return function() {
                   var t = a += 0x6D2B79F5;
@@ -240,7 +237,6 @@
                 }
             }
             
-            // This will hold our seeded random function for the current task
             let seededRandom;
 
             function generateBarcodePart(digit, patternType, context = 'main', showLabel = true) {
@@ -287,9 +283,7 @@
                 return remainder === 0 ? 0 : 10 - remainder;
             }
 
-            // MODIFIED: Uses the seeded PRNG to generate the barcode
             function generateFullUpcCode() {
-                // All "random" numbers now come from the seeded generator
                 const firstDigit = Math.floor(seededRandom() * 10).toString();
                 let dataDigits = '';
                 for (let i = 0; i < 10; i++) {
@@ -335,30 +329,27 @@
                 barcodeContainer.appendChild(lastDigitLabel);
             }
 
-            // MODIFIED: This function now runs on a seed (integer task code)
             function setupProblem(seed = null) {
                 let taskCode;
                 if (seed) {
                     taskCode = parseInt(seed, 10);
                     if (isNaN(taskCode)) {
-                        alert('Invalid Task Code. It must be an integer. Generating a random task.');
-                        setupProblem(); // Call recursively without seed
+                        alert('Érvénytelen feladatkód. A kódnak egész számnak kell lennie. Véletlenszerű feladat generálása következik.');
+                        setupProblem();
                         return;
                     }
                 } else {
-                    // Generate a new random integer seed. This is the ONLY place we use Math.random().
                     taskCode = Math.floor(Math.random() * 2147483647);
                 }
 
-                // Initialize our PRNG with the seed. All subsequent "random" calls will be deterministic.
                 seededRandom = mulberry32(taskCode);
 
                 fullBarcodeCode = generateFullUpcCode();
-                missingIndex = Math.floor(seededRandom() * 12); // Use the seeded generator
+                missingIndex = Math.floor(seededRandom() * 12);
                 const correctDigit = fullBarcodeCode[missingIndex];
                 missingPatternType = missingIndex < 6 ? 'L' : 'R';
                 
-                currentTaskCodeSpan.textContent = taskCode; // Display the integer seed
+                currentTaskCodeSpan.textContent = taskCode;
                 taskCodeInput.value = '';
                 feedbackMessage.textContent = '';
                 feedbackMessage.className = 'feedback';
@@ -367,21 +358,20 @@
                 generateOptions(correctDigit);
             }
             
-            // MODIFIED: Uses the seeded PRNG to generate options and shuffle
             function generateOptions(correctDigit) {
                 optionsContainer.innerHTML = '';
                 let options = [{ digit: correctDigit, isCorrect: true }];
                 const usedDigits = new Set([correctDigit]);
 
                 while (options.length < 6) {
-                    let randomDigit = Math.floor(seededRandom() * 10).toString(); // Use seeded generator
+                    let randomDigit = Math.floor(seededRandom() * 10).toString();
                     if (!usedDigits.has(randomDigit)) {
                         options.push({ digit: randomDigit, isCorrect: false });
                         usedDigits.add(randomDigit);
                     }
                 }
                 
-                options.sort(() => seededRandom() - 0.5); // Use seeded generator for shuffling
+                options.sort(() => seededRandom() - 0.5);
 
                 options.forEach(option => {
                     const div = document.createElement('div');
@@ -429,7 +419,6 @@
                 }
             }
             
-            // MODIFIED: Passes the input value as the seed
             generateFromCodeBtn.addEventListener('click', () => {
                 const code = taskCodeInput.value.trim();
                 if (code) {
@@ -437,7 +426,6 @@
                 }
             });
 
-            // Initial problem generation
             setupProblem();
         });
     </script>
