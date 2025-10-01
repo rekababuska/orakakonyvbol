@@ -16,9 +16,11 @@
             min-height: 100vh;
             margin: 0;
             padding: 20px;
+            box-sizing: border-box;
         }
 
         .container {
+            width: 100%;
             max-width: 1200px;
             text-align: center;
             background-color: #fff;
@@ -32,18 +34,69 @@
             font-size: 2.2em;
             margin-bottom: 30px;
         }
+        
+        .task-code-container {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 15px;
+        }
+        .task-code-container input {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 1em;
+            width: 200px;
+        }
+        .task-code-container button {
+            padding: 10px 15px;
+            border-radius: 5px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .task-code-container button:hover {
+            background-color: #0056b3;
+        }
+        .task-code-container p {
+            margin: 0;
+            font-size: 0.9em;
+            color: #555;
+        }
+        #current-task-code {
+            font-weight: bold;
+            color: #333;
+            background-color: #e9e9e9;
+            padding: 3px 6px;
+            border-radius: 4px;
+        }
 
         .barcode-main-display {
             display: flex;
-            align-items: flex-start; /* All barcode bars align at the top */
-            margin-bottom: 40px;
-            background-color: #fff;
-            padding: 20px 0;
-            border-radius: 5px;
-            overflow: hidden;
+            align-items: flex-end;
             justify-content: center;
+            gap: 5px;
+            margin-bottom: 40px;
         }
-
+        .main-bars-wrapper {
+             display: flex;
+             align-items: flex-start;
+        }
+        .digit-label-outer {
+            font-size: 1.5em;
+            font-weight: bold;
+            padding-bottom: 5px;
+        }
+        
         .barcode-digit-group {
             display: flex;
             flex-direction: column;
@@ -53,8 +106,8 @@
 
         .barcode-bars-container {
             display: flex;
-            height: 100px; /* Container height to accommodate the longest bar */
-            align-items: flex-start; /* Ensure bars start at the top of their container */
+            height: 100px; 
+            align-items: flex-start;
         }
         
         .barcode-bar {
@@ -66,7 +119,6 @@
             background-color: #fff;
         }
         
-        /* Define heights for different bar types, aligned at the top */
         .bar-normal { height: 90px; }
         .bar-long { height: 100px; }
 
@@ -82,7 +134,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 90px; /* Aligned with number-decoding bars height */
+            height: 90px;
             width: calc(2.5px * 7);
             margin: 0 2px;
             background-color: #f5f5f5;
@@ -90,6 +142,7 @@
             border-radius: 5px;
             box-sizing: border-box;
             cursor: pointer;
+            margin-bottom: 35px;
         }
         .torn-section:hover {
             border-color: #555;
@@ -97,18 +150,16 @@
 
         .options-container {
             display: grid;
-            grid-template-columns: repeat(3, 1fr); /* 3 options per row */
-            gap: 30px; /* Increased gap between options */
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 30px;
             margin-top: 40px;
-            max-width: 1000px; /* Adjusted max-width to accommodate larger options */
-            margin-left: auto;
-            margin-right: auto;
+            width: 100%;
         }
 
         .option {
             background-color: #e0e0e0;
             color: #333;
-            padding: 25px; /* Increased padding for bigger options */
+            padding: 25px;
             border-radius: 8px;
             cursor: pointer;
             border: 3px solid transparent;
@@ -118,8 +169,8 @@
             align-items: center;
             justify-content: center;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-            min-height: 120px; /* Ensure options are tall enough to contain larger barcodes */
-            box-sizing: border-box; /* Include padding in element's total width and height */
+            min-height: 120px; 
+            box-sizing: border-box;
         }
 
         .option:hover {
@@ -127,13 +178,8 @@
             transform: translateY(-2px);
         }
 
-        .option.selected-correct {
-            border-color: #28a745;
-        }
-
-        .option.selected-incorrect {
-            border-color: #dc3545;
-        }
+        .option.selected-correct { border-color: #28a745; }
+        .option.selected-incorrect { border-color: #dc3545; }
         
         .feedback {
             margin-top: 40px;
@@ -142,23 +188,23 @@
             min-height: 2em;
         }
         
-        .correct {
-            color: #28a745;
-        }
-
-        .incorrect {
-            color: #dc3545;
-        }
+        .correct { color: #28a745; }
+        .incorrect { color: #dc3545; }
     </style>
 </head>
 <body>
 
     <div class="container">
         <h1>Válaszd ki a hiányzó vonalkód részletet!</h1>
-        <div class="barcode-main-display" id="barcode-container">
-            </div>
-        <div class="options-container" id="options-container">
-            </div>
+        
+        <div class="task-code-container">
+            <input type="number" id="task-code-input" placeholder="Enter task code (integer)">
+            <button id="generate-from-code">Generate Task</button>
+            <p>Current Task Code: <strong id="current-task-code">N/A</strong></p>
+        </div>
+
+        <div class="barcode-main-display" id="barcode-container"></div>
+        <div class="options-container" id="options-container"></div>
         <div class="feedback" id="feedback-message"></div>
     </div>
 
@@ -166,42 +212,45 @@
         document.addEventListener('DOMContentLoaded', () => {
 
             const upcAPatterns = {
-                L: {
-                    '0': '0001101', '1': '0011001', '2': '0010011', '3': '0111101', '4': '0100011',
-                    '5': '0110001', '6': '0101111', '7': '0111011', '8': '0110111', '9': '0001011'
-                },
-                R: {
-                    '0': '1110010', '1': '1100110', '2': '1101100', '3': '1000010', '4': '1011100',
-                    '5': '1001110', '6': '1010000', '7': '1000100', '8': '1001000', '9': '1110100'
-                }
+                L: { '0': '0001101', '1': '0011001', '2': '0010011', '3': '0111101', '4': '0100011', '5': '0110001', '6': '0101111', '7': '0111011', '8': '0110111', '9': '0001011' },
+                R: { '0': '1110010', '1': '1100110', '2': '1101100', '3': '1000010', '4': '1011100', '5': '1001110', '6': '1010000', '7': '1000100', '8': '1001000', '9': '1110100' }
             };
-            const guardPatterns = {
-                start: '101',
-                middle: '01010',
-                end: '101'
-            };
+            const guardPatterns = { start: '101', middle: '01010', end: '101' };
 
             const barcodeContainer = document.getElementById('barcode-container');
             const optionsContainer = document.getElementById('options-container');
             const feedbackMessage = document.getElementById('feedback-message');
-
-            let correctDigit = '';
-            let correctPartHtml = '';
+            const taskCodeInput = document.getElementById('task-code-input');
+            const generateFromCodeBtn = document.getElementById('generate-from-code');
+            const currentTaskCodeSpan = document.getElementById('current-task-code');
+            
+            // Global variables for the current task
             let fullBarcodeCode = '';
             let missingIndex = -1;
             let missingPatternType = '';
+            
+            // NEW: A simple seedable pseudo-random number generator (PRNG)
+            // This allows tasks to be reproduced from a single integer seed.
+            function mulberry32(a) {
+                return function() {
+                  var t = a += 0x6D2B79F5;
+                  t = Math.imul(t ^ t >>> 15, t | 1);
+                  t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                  return ((t ^ t >>> 14) >>> 0) / 4294967296;
+                }
+            }
+            
+            // This will hold our seeded random function for the current task
+            let seededRandom;
 
-            function generateBarcodePart(digit, patternType, parentType = 'main') {
+            function generateBarcodePart(digit, patternType, context = 'main', showLabel = true) {
                 const pattern = upcAPatterns[patternType][digit];
                 let barsHtml = '';
                 const barHeightClass = 'bar-normal';
-
                 for (let i = 0; i < pattern.length; i++) {
                     barsHtml += `<div class="${pattern[i] === '1' ? 'barcode-bar' : 'barcode-space'} ${barHeightClass}"></div>`;
                 }
-                
-                const digitLabelHtml = parentType === 'main' ? `<div class="digit-label">${digit}</div>` : '';
-
+                const digitLabelHtml = (context === 'main' && showLabel) ? `<div class="digit-label">${digit}</div>` : '';
                 return `
                     <div class="barcode-digit-group">
                         <div class="barcode-bars-container">${barsHtml}</div>
@@ -212,21 +261,20 @@
             function generateGuardBars(pattern, type) {
                 let barsHtml = '';
                 const barHeightType = 'bar-long';
-                
                 for (let i = 0; i < pattern.length; i++) {
                     barsHtml += `<div class="${pattern[i] === '1' ? 'barcode-bar' : 'barcode-space'} ${barHeightType}"></div>`;
                 }
-                return `<div class="barcode-digit-group"><div class="barcode-bars-container">${barsHtml}</div></div>`;
+                 return `<div class="barcode-digit-group" style="margin-bottom: 35px;"><div class="barcode-bars-container">${barsHtml}</div></div>`;
             }
 
             function generateTornSection() {
-                return `<div class="torn-section"></div>`;
+                return `<div class="torn-section">?</div>`;
             }
 
             function calculateCheckDigit(code) {
                 let oddSum = 0;
                 let evenSum = 0;
-                for (let i = 0; i < 11; i++) {
+                for (let i = 0; i < 10; i++) {
                     const digit = parseInt(code[i]);
                     if ((i + 1) % 2 !== 0) {
                         oddSum += digit;
@@ -239,70 +287,106 @@
                 return remainder === 0 ? 0 : 10 - remainder;
             }
 
+            // MODIFIED: Uses the seeded PRNG to generate the barcode
             function generateFullUpcCode() {
-                let code = '';
-                for (let i = 0; i < 11; i++) {
-                    code += Math.floor(Math.random() * 10);
+                // All "random" numbers now come from the seeded generator
+                const firstDigit = Math.floor(seededRandom() * 10).toString();
+                let dataDigits = '';
+                for (let i = 0; i < 10; i++) {
+                    dataDigits += Math.floor(seededRandom() * 10);
                 }
-                const checkDigit = calculateCheckDigit(code);
-                code += checkDigit;
-                return code;
+                const checkDigit = calculateCheckDigit(dataDigits);
+                return firstDigit + dataDigits + checkDigit;
             }
 
-            function renderBarcode(code, missingIdx, missingPart) {
-                barcodeContainer.innerHTML = '';
-                barcodeContainer.innerHTML += generateGuardBars(guardPatterns.start, 'start');
-
-                for (let i = 0; i < code.length; i++) {
-                    const patternType = i < 6 ? 'L' : 'R';
+            function renderBarcode(code, missingIdx, showMissingPart) {
+                barcodeContainer.innerHTML = ''; 
+                const firstDigitLabel = document.createElement('div');
+                firstDigitLabel.className = 'digit-label-outer';
+                firstDigitLabel.textContent = code[0];
+                barcodeContainer.appendChild(firstDigitLabel);
+                const mainBarsWrapper = document.createElement('div');
+                mainBarsWrapper.className = 'main-bars-wrapper';
+                let mainBarsHtml = '';
+                mainBarsHtml += generateGuardBars(guardPatterns.start, 'start');
+                for (let i = 0; i < 6; i++) {
+                    const showLabel = i > 0;
                     if (i === missingIdx) {
-                         if (missingPart) {
-                            barcodeContainer.innerHTML += generateBarcodePart(code[i], patternType, 'main');
-                         } else {
-                            barcodeContainer.innerHTML += generateTornSection();
-                         }
+                        mainBarsHtml += showMissingPart ? generateBarcodePart(code[i], 'L', 'main', showLabel) : generateTornSection();
                     } else {
-                        barcodeContainer.innerHTML += generateBarcodePart(code[i], patternType);
-                    }
-                    if (i === 5) {
-                        barcodeContainer.innerHTML += generateGuardBars(guardPatterns.middle, 'middle');
+                        mainBarsHtml += generateBarcodePart(code[i], 'L', 'main', showLabel);
                     }
                 }
-                barcodeContainer.innerHTML += generateGuardBars(guardPatterns.end, 'end');
+                mainBarsHtml += generateGuardBars(guardPatterns.middle, 'middle');
+                for (let i = 6; i < 12; i++) {
+                    const showLabel = i < 11;
+                    if (i === missingIdx) {
+                        mainBarsHtml += showMissingPart ? generateBarcodePart(code[i], 'R', 'main', showLabel) : generateTornSection();
+                    } else {
+                        mainBarsHtml += generateBarcodePart(code[i], 'R', 'main', showLabel);
+                    }
+                }
+                mainBarsHtml += generateGuardBars(guardPatterns.end, 'end');
+                mainBarsWrapper.innerHTML = mainBarsHtml;
+                barcodeContainer.appendChild(mainBarsWrapper);
+                const lastDigitLabel = document.createElement('div');
+                lastDigitLabel.className = 'digit-label-outer';
+                lastDigitLabel.textContent = code[11];
+                barcodeContainer.appendChild(lastDigitLabel);
             }
 
-            function generateAndDisplayProblem() {
+            // MODIFIED: This function now runs on a seed (integer task code)
+            function setupProblem(seed = null) {
+                let taskCode;
+                if (seed) {
+                    taskCode = parseInt(seed, 10);
+                    if (isNaN(taskCode)) {
+                        alert('Invalid Task Code. It must be an integer. Generating a random task.');
+                        setupProblem(); // Call recursively without seed
+                        return;
+                    }
+                } else {
+                    // Generate a new random integer seed. This is the ONLY place we use Math.random().
+                    taskCode = Math.floor(Math.random() * 2147483647);
+                }
+
+                // Initialize our PRNG with the seed. All subsequent "random" calls will be deterministic.
+                seededRandom = mulberry32(taskCode);
+
                 fullBarcodeCode = generateFullUpcCode();
-                missingIndex = Math.floor(Math.random() * 12);
-                correctDigit = fullBarcodeCode[missingIndex];
+                missingIndex = Math.floor(seededRandom() * 12); // Use the seeded generator
+                const correctDigit = fullBarcodeCode[missingIndex];
                 missingPatternType = missingIndex < 6 ? 'L' : 'R';
                 
-                correctPartHtml = generateBarcodePart(correctDigit, missingPatternType, 'option'); 
-                
-                renderBarcode(fullBarcodeCode, missingIndex, null);
-                generateOptions();
+                currentTaskCodeSpan.textContent = taskCode; // Display the integer seed
+                taskCodeInput.value = '';
                 feedbackMessage.textContent = '';
+                feedbackMessage.className = 'feedback';
+                
+                renderBarcode(fullBarcodeCode, missingIndex, false);
+                generateOptions(correctDigit);
             }
             
-            function generateOptions() {
+            // MODIFIED: Uses the seeded PRNG to generate options and shuffle
+            function generateOptions(correctDigit) {
                 optionsContainer.innerHTML = '';
-                let options = [];
-                
-                options.push({ digit: correctDigit, patternType: missingPatternType, isCorrect: true });
-                
+                let options = [{ digit: correctDigit, isCorrect: true }];
+                const usedDigits = new Set([correctDigit]);
+
                 while (options.length < 6) {
-                    let randomDigit = Math.floor(Math.random() * 10).toString();
-                    if (randomDigit !== correctDigit) {
-                        options.push({ digit: randomDigit, patternType: missingPatternType, isCorrect: false });
+                    let randomDigit = Math.floor(seededRandom() * 10).toString(); // Use seeded generator
+                    if (!usedDigits.has(randomDigit)) {
+                        options.push({ digit: randomDigit, isCorrect: false });
+                        usedDigits.add(randomDigit);
                     }
                 }
                 
-                options.sort(() => Math.random() - 0.5);
+                options.sort(() => seededRandom() - 0.5); // Use seeded generator for shuffling
 
                 options.forEach(option => {
                     const div = document.createElement('div');
                     div.className = 'option';
-                    div.innerHTML = generateBarcodePart(option.digit, option.patternType, 'option');
+                    div.innerHTML = generateBarcodePart(option.digit, missingPatternType, 'option', false);
                     div.dataset.isCorrect = option.isCorrect;
                     div.addEventListener('click', handleOptionClick);
                     optionsContainer.appendChild(div);
@@ -311,33 +395,50 @@
 
             function handleOptionClick(event) {
                 const clickedOption = event.currentTarget;
+                if (clickedOption.classList.contains('selected-correct') || clickedOption.classList.contains('selected-incorrect')) {
+                    return;
+                }
                 const isCorrect = clickedOption.dataset.isCorrect === 'true';
 
-                // First, remove any previous selections and feedback
                 document.querySelectorAll('.option').forEach(option => {
-                    option.classList.remove('selected-correct', 'selected-incorrect');
+                     option.removeEventListener('click', handleOptionClick);
+                     option.style.cursor = 'default';
                 });
-                feedbackMessage.textContent = '';
 
                 if (isCorrect) {
                     clickedOption.classList.add('selected-correct');
+                    feedbackMessage.textContent = 'Helyes megoldás. 🎉';
+                    feedbackMessage.className = 'feedback correct';
                     setTimeout(() => {
-                        feedbackMessage.textContent = 'Helyes megoldás. 🎉';
-                        feedbackMessage.className = 'feedback correct';
                         renderBarcode(fullBarcodeCode, missingIndex, true);
                         optionsContainer.innerHTML = '';
-                        setTimeout(generateAndDisplayProblem, 3000);
-                    }, 750);
+                        setTimeout(() => setupProblem(), 3000);
+                    }, 1000);
                 } else {
                     clickedOption.classList.add('selected-incorrect');
-                    setTimeout(() => {
-                        feedbackMessage.textContent = 'Próbáld újra! ❌';
-                        feedbackMessage.className = 'feedback incorrect';
-                    }, 500);
+                    feedbackMessage.textContent = 'Próbáld újra! ❌';
+                    feedbackMessage.className = 'feedback incorrect';
+                     setTimeout(() => {
+                        clickedOption.classList.remove('selected-incorrect');
+                        document.querySelectorAll('.option').forEach(option => {
+                           option.addEventListener('click', handleOptionClick);
+                           option.style.cursor = 'pointer';
+                        });
+                        feedbackMessage.textContent = '';
+                     }, 2000);
                 }
             }
+            
+            // MODIFIED: Passes the input value as the seed
+            generateFromCodeBtn.addEventListener('click', () => {
+                const code = taskCodeInput.value.trim();
+                if (code) {
+                    setupProblem(code);
+                }
+            });
 
-            generateAndDisplayProblem();
+            // Initial problem generation
+            setupProblem();
         });
     </script>
 </body>
