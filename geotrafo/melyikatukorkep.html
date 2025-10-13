@@ -434,15 +434,25 @@
             const margin = 20;
             const scaledMargin = margin * scaleFactor;
 
-            // Create original shape with relative positioning
+            // Create original shape with random positioning across canvas
+            const segmentLength = (100 + Math.random() * 30) * scaleFactor;
+            const segmentDx = segmentLength * (Math.random() - 0.5) * 2;
+            const segmentDy = Math.sqrt(segmentLength * segmentLength - segmentDx * segmentDx) * (Math.random() > 0.5 ? 1 : -1);
+
+            // Calculate valid range for p1 so that p2 also stays within bounds
+            const minX = segmentDx < 0 ? scaledMargin - segmentDx : scaledMargin;
+            const maxX = segmentDx > 0 ? actualCanvasWidth - scaledMargin - segmentDx : actualCanvasWidth - scaledMargin;
+            const minY = segmentDy < 0 ? scaledMargin - segmentDy : scaledMargin;
+            const maxY = segmentDy > 0 ? actualCanvasHeight - scaledMargin - segmentDy : actualCanvasHeight - scaledMargin;
+
             const p1 = {
-                x: scaledMargin + 60 * scaleFactor,
-                y: actualCanvasHeight / 2 + (Math.random() - 0.5) * (actualCanvasHeight * 0.3),
+                x: minX + Math.random() * (maxX - minX),
+                y: minY + Math.random() * (maxY - minY),
                 color: colors.red
             };
             const p2 = {
-                x: p1.x + (100 + Math.random() * 30) * scaleFactor,
-                y: p1.y + (Math.random() - 0.5) * 50 * scaleFactor,
+                x: p1.x + segmentDx,
+                y: p1.y + segmentDy,
                 color: colors.blue
             };
             originalShape = { type: 'segment', p1, p2 };
@@ -453,14 +463,18 @@
 
             let generatedShapes = [];
             const numCorrect = 3;
-            const numIncorrect = Math.min(6, Math.floor(actualCanvasWidth / 150));
+            // Ensure minimum 5 shapes even on mobile
+            const minShapes = 5;
+            const desiredIncorrect = Math.max(minShapes - numCorrect, 4);
+            const numIncorrect = Math.max(desiredIncorrect, Math.floor(actualCanvasWidth / 200));
 
             // Generate correct shapes
             for (let i = 0; i < numCorrect; i++) {
                 let shape;
                 let attempts = 0;
                 do {
-                    const availableWidth = actualCanvasWidth * 0.6 - scaledMargin - Math.abs(originalDx);
+                    // Randomly position shapes across entire canvas
+                    const availableWidth = actualCanvasWidth - 2 * scaledMargin - Math.abs(originalDx);
                     const availableHeight = actualCanvasHeight - 2 * scaledMargin - Math.abs(originalDy);
 
                     if (availableWidth <= 0 || availableHeight <= 0) {
@@ -468,7 +482,7 @@
                         continue;
                     }
 
-                    const startX = actualCanvasWidth * 0.4 + Math.random() * availableWidth;
+                    const startX = scaledMargin + Math.random() * availableWidth;
                     const startY = scaledMargin + Math.random() * availableHeight;
 
                     shape = {
@@ -488,7 +502,8 @@
                 let shape;
                 let attempts = 0;
                 do {
-                    const startX = actualCanvasWidth * 0.35 + Math.random() * (actualCanvasWidth * 0.65 - 2 * scaledMargin);
+                    // Randomly position shapes across entire canvas
+                    const startX = scaledMargin + Math.random() * (actualCanvasWidth - 2 * scaledMargin);
                     const startY = scaledMargin + Math.random() * (actualCanvasHeight - 2 * scaledMargin);
                     const type = Math.floor(Math.random() * 3);
 
@@ -555,30 +570,39 @@
             const margin = 20;
             const scaledMargin = margin * scaleFactor;
 
-            // Create original triangle
-            const v1 = {
-                x: scaledMargin + 60 * scaleFactor,
-                y: actualCanvasHeight / 2 + (Math.random() - 0.5) * (actualCanvasHeight * 0.2),
-                color: colors.red
-            };
+            // Create original triangle with random position
             const leg1Len = (80 + Math.random() * 40) * scaleFactor;
             const leg2Len = (80 + Math.random() * 40) * scaleFactor;
+
+            // Random position for original triangle anywhere on canvas
+            const triangleMaxX = actualCanvasWidth - scaledMargin - leg1Len;
+            const triangleMaxY = actualCanvasHeight - scaledMargin - leg2Len;
+
+            const v1 = {
+                x: scaledMargin + Math.random() * (triangleMaxX - scaledMargin),
+                y: scaledMargin + Math.random() * (triangleMaxY - scaledMargin),
+                color: colors.red
+            };
             const v2 = { x: v1.x + leg1Len, y: v1.y, color: colors.blue };
             const v3 = { x: v1.x, y: v1.y + leg2Len, color: colors.green };
             originalShape = { type: 'triangle', vertices: [v1, v2, v3] };
 
             let generatedShapes = [];
             const numCorrect = 3;
-            const numIncorrect = Math.min(6, Math.floor(actualCanvasWidth / 150));
+            // Ensure minimum 5 shapes even on mobile
+            const minShapes = 5;
+            const desiredIncorrect = Math.max(minShapes - numCorrect, 4);
+            const numIncorrect = Math.max(desiredIncorrect, Math.floor(actualCanvasWidth / 200));
 
             // Generate correct shapes (point reflection)
             for (let i = 0; i < numCorrect; i++) {
                 let shape;
                 let attempts = 0;
                 do {
+                    // Random center point anywhere on canvas for point reflection
                     const center = {
-                        x: actualCanvasWidth * (0.45 + Math.random() * 0.1),
-                        y: actualCanvasHeight * (0.5 + (Math.random() - 0.5) * 0.3)
+                        x: scaledMargin * 2 + Math.random() * (actualCanvasWidth - scaledMargin * 4),
+                        y: scaledMargin * 2 + Math.random() * (actualCanvasHeight - scaledMargin * 4)
                     };
                     const newV1 = { x: 2 * center.x - v1.x, y: 2 * center.y - v1.y, color: v1.color };
                     const newV2 = { x: 2 * center.x - v2.x, y: 2 * center.y - v2.y, color: v2.color };
@@ -598,7 +622,7 @@
                     const bounds = getShapeBounds(originalShape);
                     const shapeWidth = bounds.maxX - bounds.minX;
                     const shapeHeight = bounds.maxY - bounds.minY;
-                    const availableWidth = actualCanvasWidth * 0.5 - scaledMargin - shapeWidth;
+                    const availableWidth = actualCanvasWidth - 2 * scaledMargin - shapeWidth;
                     const availableHeight = actualCanvasHeight - 2 * scaledMargin - shapeHeight;
 
                     if (availableWidth <= 0 || availableHeight <= 0) {
@@ -606,7 +630,8 @@
                         continue;
                     }
 
-                    const startX = actualCanvasWidth * 0.5 + Math.random() * availableWidth;
+                    // Random position across entire canvas
+                    const startX = scaledMargin + Math.random() * availableWidth;
                     const startY = scaledMargin + Math.random() * availableHeight;
 
                     const type = Math.floor(Math.random() * 4);
@@ -679,20 +704,32 @@
             const margin = 20;
             const scaledMargin = margin * scaleFactor;
 
-            // Create original parallelogram
+            // Create original parallelogram with random position
+            const baseWidth = 100 * scaleFactor;
+            const slantX = -30 * scaleFactor;
+            const slantY = -50 * scaleFactor;
+            const baseHeight = 30 * scaleFactor;
+
+            // Calculate bounds for random positioning
+            const paraMaxX = Math.max(baseWidth, Math.abs(slantX)) + baseWidth;
+            const paraMaxY = Math.max(Math.abs(baseHeight), Math.abs(slantY)) + Math.abs(baseHeight);
+
+            const startX = scaledMargin + Math.random() * Math.max(0, actualCanvasWidth - scaledMargin * 2 - paraMaxX);
+            const startY = scaledMargin + paraMaxY / 2 + Math.random() * Math.max(0, actualCanvasHeight - scaledMargin * 2 - paraMaxY);
+
             const v1 = {
-                x: scaledMargin + 60 * scaleFactor,
-                y: actualCanvasHeight / 2 + 30 * scaleFactor,
+                x: startX,
+                y: startY,
                 color: colors.red
             };
             const v2 = {
-                x: v1.x + 100 * scaleFactor,
-                y: v1.y - 30 * scaleFactor,
+                x: v1.x + baseWidth,
+                y: v1.y - baseHeight,
                 color: colors.blue
             };
             const v4 = {
-                x: v1.x - 30 * scaleFactor,
-                y: v1.y - 50 * scaleFactor,
+                x: v1.x + slantX,
+                y: v1.y + slantY,
                 color: colors.yellow
             };
             const v3 = {
@@ -704,7 +741,10 @@
 
             let generatedShapes = [];
             const numCorrect = 2;
-            const numIncorrect = Math.min(5, Math.floor(actualCanvasWidth / 150));
+            // Ensure minimum 5 shapes even on mobile
+            const minShapes = 5;
+            const desiredIncorrect = Math.max(minShapes - numCorrect, 3);
+            const numIncorrect = Math.max(desiredIncorrect, Math.floor(actualCanvasWidth / 200));
 
             const reflectPointOverLine = (point, line) => {
                 const a = line.m;
@@ -748,7 +788,7 @@
                     const bounds = getShapeBounds(originalShape);
                     const shapeWidth = bounds.maxX - bounds.minX;
                     const shapeHeight = bounds.maxY - bounds.minY;
-                    const availableWidth = actualCanvasWidth * 0.6 - scaledMargin - shapeWidth;
+                    const availableWidth = actualCanvasWidth - 2 * scaledMargin - shapeWidth;
                     const availableHeight = actualCanvasHeight - 2 * scaledMargin - shapeHeight;
 
                     if (availableWidth <= 0 || availableHeight <= 0) {
@@ -756,7 +796,8 @@
                         continue;
                     }
 
-                    const startX = actualCanvasWidth * 0.4 + Math.random() * availableWidth;
+                    // Random position across entire canvas
+                    const startX = scaledMargin + Math.random() * availableWidth;
                     const startY = scaledMargin + Math.random() * availableHeight;
 
                     const type = Math.floor(Math.random() * 3);
