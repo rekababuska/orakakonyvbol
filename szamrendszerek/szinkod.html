@@ -14,16 +14,6 @@
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
         }
-        /* Custom styles for the input for a more modern look */
-        input[type="text"] {
-            border: 1px solid #d4d4d4;
-            transition: all 0.3s ease;
-        }
-        input[type="text"]:focus {
-            outline: none;
-            border-color: #525252;
-            box-shadow: 0 0 0 2px rgba(82, 82, 82, 0.25);
-        }
         /* Custom styles for the color palette grid */
         .color-palette {
             display: grid;
@@ -59,7 +49,7 @@
             <h1 class="text-xl md:text-2xl font-semibold text-zinc-200">Add meg a képen látható szín színkódját!</h1>
             
             <div class="flex items-center justify-center space-x-2">
-                <input type="text" id="seedInput" class="text-zinc-900 text-center w-40 p-2 rounded-lg font-mono tracking-wider" placeholder="Kód">
+                <input type="text" id="seedInput" class="bg-zinc-100 text-zinc-900 text-center w-40 p-2 rounded-lg font-mono tracking-wider" placeholder="Kód">
                 <button id="seedBtn" class="bg-zinc-700 hover:bg-zinc-600 text-zinc-50 py-2 px-4 rounded-xl transition-colors duration-200 shadow-md">
                     Mehet!
                 </button>
@@ -72,7 +62,15 @@
                 </div>
                 
                 <div class="flex flex-col items-center space-y-4">
-                    <input type="text" id="hexInput" class="text-zinc-900 text-center w-40 p-2 rounded-lg font-mono tracking-wider focus:ring-2 focus:ring-zinc-600 transition-shadow duration-200" placeholder="#RRGGBB" maxlength="7">
+                    <div class="space-y-3">
+                        <div class="flex items-center bg-white rounded-lg p-2 w-40 border border-zinc-400 focus-within:border-zinc-900 focus-within:ring-2 focus-within:ring-zinc-600 transition">
+                            <span class="text-zinc-500 font-mono pl-1">#</span>
+                            <input type="text" id="hexInput" class="bg-transparent text-zinc-900 text-left w-full font-mono tracking-wider focus:outline-none pl-1" placeholder="RRGGBB" maxlength="6">
+                        </div>
+                        <button id="guessBtn" class="w-full bg-zinc-700 hover:bg-zinc-600 text-zinc-50 py-2 px-4 rounded-xl transition-colors duration-200 shadow-md">
+                            Tippelek
+                        </button>
+                    </div>
                     <div id="guessColor" class="w-32 h-32 md:w-40 md:h-40 rounded-xl border-4 border-zinc-700 shadow-lg"></div>
                     <span class="text-sm text-zinc-400">Tipped</span>
                 </div>
@@ -83,7 +81,6 @@
             </p>
             
             <p id="distanceOutput" class="text-zinc-300 font-medium text-lg mt-2 hidden">
-                Távolság: <span id="distanceValue" class="text-zinc-50 font-bold"></span>
             </p>
             
             <p id="correctCodeOutput" class="text-zinc-300 font-medium text-lg mt-2 hidden">
@@ -121,9 +118,9 @@
             const hexInput = document.getElementById('hexInput');
             const seedInput = document.getElementById('seedInput');
             const seedBtn = document.getElementById('seedBtn');
+            const guessBtn = document.getElementById('guessBtn');
             const guessCounterSpan = document.getElementById('guessCounter');
             const distanceOutput = document.getElementById('distanceOutput');
-            const distanceValueSpan = document.getElementById('distanceValue');
             const correctCodeOutput = document.getElementById('correctCodeOutput');
             const correctCodeValueSpan = document.getElementById('correctCodeValue');
 
@@ -149,7 +146,7 @@
                 const c = 1013904223;
                 const m = 4294967296; // 2^32
                 s = (a * s + c) % m;
-                currentSeed = s; // Update the seed for the next call
+                currentSeed = s;
                 return s / m;
             }
 
@@ -191,7 +188,7 @@
 
             // Task Logic Functions
             function setupTask1(isNewGame = true) {
-                 if (isNewGame) {
+                if (isNewGame) {
                     state.targetHex1 = generateRandomHex();
                     currentSeed = null;
                 }
@@ -200,6 +197,8 @@
                 targetColorDiv.style.backgroundColor = state.targetHex1;
                 hexInput.value = '';
                 hexInput.disabled = false;
+                guessBtn.disabled = false;
+                guessBtn.classList.remove('opacity-50', 'cursor-not-allowed');
                 guessColorDiv.style.backgroundColor = '#ffffff';
                 distanceOutput.classList.add('hidden');
                 correctCodeOutput.classList.add('hidden');
@@ -278,40 +277,48 @@
                 }
             });
 
-            // Task 1 Event Listener
-            hexInput.addEventListener('input', (event) => {
-                const value = event.target.value.trim().toUpperCase();
-                
+            // --- ✨ TASK 1 EVENT LISTENERS MODIFIED ---
+
+            // ✨ REMOVED: The 'input' event listener that showed a real-time preview is now gone.
+
+            // Process the guess only when the button is clicked
+            guessBtn.addEventListener('click', () => {
+                const value = hexInput.value.trim().toUpperCase();
+
                 if (state.guessCount1 >= 3) {
-                    return;
+                    return; // Game over
                 }
 
-                if (/^#[0-9A-F]{6}$/.test(value)) {
+                if (/^[0-9A-F]{6}$/i.test(value)) {
+                    const fullHex = '#' + value;
                     state.guessCount1++;
                     guessCounterSpan.textContent = `Hátralévő tippek: ${3 - state.guessCount1}`;
+
+                    // ✨ This is now the ONLY place the guess color swatch is updated.
+                    guessColorDiv.style.backgroundColor = fullHex;
                     
-                    guessColorDiv.style.backgroundColor = value;
                     distanceOutput.classList.remove('hidden');
-                    const distance = calculateDistance(state.targetHex1, value);
-                    distanceValueSpan.textContent = distance.toFixed(2);
+                    const distance = calculateDistance(state.targetHex1, fullHex);
                     
+                    const distanceTextPrefix = `Távolság: `;
+                    const distanceTextSuffix = distance < 80 ? ` - Közel a célhoz!` : ``;
+                    distanceOutput.textContent = `${distanceTextPrefix}${distance.toFixed(2)}${distanceTextSuffix}`;
+
                     if (distance < 80) {
                         distanceOutput.classList.remove('text-zinc-300');
                         distanceOutput.classList.add('text-green-400');
-                        distanceOutput.textContent = `Távolság: ${distance.toFixed(2)} - Közel a célhoz!`
                     } else {
                         distanceOutput.classList.remove('text-green-400');
                         distanceOutput.classList.add('text-zinc-300');
-                        distanceOutput.textContent = `Távolság: ${distance.toFixed(2)}`
                     }
 
                     if (state.guessCount1 >= 3) {
                         hexInput.disabled = true;
+                        guessBtn.disabled = true;
+                        guessBtn.classList.add('opacity-50', 'cursor-not-allowed');
                         correctCodeOutput.classList.remove('hidden');
                         correctCodeValueSpan.textContent = state.targetHex1.toUpperCase();
                     }
-                } else {
-                    guessColorDiv.style.backgroundColor = '#ffffff';
                 }
             });
 
@@ -328,7 +335,7 @@
                 
                 currentSeed = newSeed;
                 state.targetHex1 = generateRandomHex(true);
-                setupTask1(false); // Use false to indicate we are not generating a new random color, but using the seeded one.
+                setupTask1(false);
                 seedInput.value = '';
             });
 
