@@ -95,6 +95,7 @@
             font-size: 1.5em;
             font-weight: bold;
             padding-bottom: 5px;
+            min-width: 15px; /* Biztosítja, hogy az üres karakter ne csúsztassa el a layoutot */
         }
         
         .barcode-digit-group {
@@ -190,6 +191,22 @@
         
         .correct { color: #28a745; }
         .incorrect { color: #dc3545; }
+
+        .next-task-btn {
+            padding: 12px 25px;
+            font-size: 1.1em;
+            border-radius: 5px;
+            border: none;
+            background-color: #28a745;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            display: none;
+            margin-top: 20px;
+        }
+        .next-task-btn:hover {
+            background-color: #218838;
+        }
     </style>
 </head>
 <body>
@@ -206,6 +223,7 @@
         <div class="barcode-main-display" id="barcode-container"></div>
         <div class="options-container" id="options-container"></div>
         <div class="feedback" id="feedback-message"></div>
+        <button id="next-task-btn" class="next-task-btn">Új vonalkód generálása</button>
     </div>
 
     <script>
@@ -223,6 +241,7 @@
             const taskCodeInput = document.getElementById('task-code-input');
             const generateFromCodeBtn = document.getElementById('generate-from-code');
             const currentTaskCodeSpan = document.getElementById('current-task-code');
+            const nextTaskBtn = document.getElementById('next-task-btn'); 
             
             let fullBarcodeCode = '';
             let missingIndex = -1;
@@ -270,7 +289,7 @@
             function calculateCheckDigit(code) {
                 let oddSum = 0;
                 let evenSum = 0;
-                for (let i = 0; i < 10; i++) {
+                for (let i = 0; i < 11; i++) {
                     const digit = parseInt(code[i]);
                     if ((i + 1) % 2 !== 0) {
                         oddSum += digit;
@@ -289,20 +308,26 @@
                 for (let i = 0; i < 10; i++) {
                     dataDigits += Math.floor(seededRandom() * 10);
                 }
-                const checkDigit = calculateCheckDigit(dataDigits);
-                return firstDigit + dataDigits + checkDigit;
+                const code11 = firstDigit + dataDigits;
+                const checkDigit = calculateCheckDigit(code11);
+                return code11 + checkDigit;
             }
 
             function renderBarcode(code, missingIdx, showMissingPart) {
                 barcodeContainer.innerHTML = ''; 
+                
+                // Első számjegy (0. index) elrejtése, ha az hiányzik
                 const firstDigitLabel = document.createElement('div');
                 firstDigitLabel.className = 'digit-label-outer';
-                firstDigitLabel.textContent = code[0];
+                firstDigitLabel.textContent = (missingIdx === 0 && !showMissingPart) ? '\u00A0' : code[0];
                 barcodeContainer.appendChild(firstDigitLabel);
+                
                 const mainBarsWrapper = document.createElement('div');
                 mainBarsWrapper.className = 'main-bars-wrapper';
                 let mainBarsHtml = '';
+                
                 mainBarsHtml += generateGuardBars(guardPatterns.start, 'start');
+                
                 for (let i = 0; i < 6; i++) {
                     const showLabel = i > 0;
                     if (i === missingIdx) {
@@ -311,7 +336,9 @@
                         mainBarsHtml += generateBarcodePart(code[i], 'L', 'main', showLabel);
                     }
                 }
+                
                 mainBarsHtml += generateGuardBars(guardPatterns.middle, 'middle');
+                
                 for (let i = 6; i < 12; i++) {
                     const showLabel = i < 11;
                     if (i === missingIdx) {
@@ -320,12 +347,15 @@
                         mainBarsHtml += generateBarcodePart(code[i], 'R', 'main', showLabel);
                     }
                 }
+                
                 mainBarsHtml += generateGuardBars(guardPatterns.end, 'end');
                 mainBarsWrapper.innerHTML = mainBarsHtml;
                 barcodeContainer.appendChild(mainBarsWrapper);
+                
+                // Utolsó számjegy (11. index) elrejtése, ha az hiányzik
                 const lastDigitLabel = document.createElement('div');
                 lastDigitLabel.className = 'digit-label-outer';
-                lastDigitLabel.textContent = code[11];
+                lastDigitLabel.textContent = (missingIdx === 11 && !showMissingPart) ? '\u00A0' : code[11];
                 barcodeContainer.appendChild(lastDigitLabel);
             }
 
@@ -354,6 +384,9 @@
                 feedbackMessage.textContent = '';
                 feedbackMessage.className = 'feedback';
                 
+                optionsContainer.style.display = 'grid';
+                nextTaskBtn.style.display = 'none';
+
                 renderBarcode(fullBarcodeCode, missingIndex, false);
                 generateOptions(correctDigit);
             }
@@ -399,10 +432,11 @@
                     clickedOption.classList.add('selected-correct');
                     feedbackMessage.textContent = 'Helyes megoldás. 🎉';
                     feedbackMessage.className = 'feedback correct';
+                    
                     setTimeout(() => {
                         renderBarcode(fullBarcodeCode, missingIndex, true);
-                        optionsContainer.innerHTML = '';
-                        setTimeout(() => setupProblem(), 3000);
+                        optionsContainer.style.display = 'none'; 
+                        nextTaskBtn.style.display = 'inline-block'; 
                     }, 1000);
                 } else {
                     clickedOption.classList.add('selected-incorrect');
@@ -424,6 +458,10 @@
                 if (code) {
                     setupProblem(code);
                 }
+            });
+
+            nextTaskBtn.addEventListener('click', () => {
+                setupProblem();
             });
 
             setupProblem();
