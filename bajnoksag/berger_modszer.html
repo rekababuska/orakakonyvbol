@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <title>Berger módszer</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f4f7f6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 1000px;
+        }
+        #animation-area {
+            position: relative;
+            width: 300px;
+            height: 350px;
+            background-color: #fff;
+            border-radius: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            padding: 20px;
+        }
+        .team {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 50%;
+            font-size: 20px;
+            font-weight: bold;
+            transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 2;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .team-fixed { background-color: #e74c3c; border: 3px solid #c0392b; }
+        .team-moving { background-color: #3498db; border: 3px solid #2980b9; }
+
+        .match-line {
+            position: absolute;
+            width: 120px;
+            height: 4px;
+            background-color: #ecf0f1;
+            left: 110px;
+            z-index: 1;
+            border-radius: 2px;
+        }
+
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            background-color: #2c3e50;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            transition: all 0.3s;
+            font-weight: bold;
+            margin-bottom: 40px;
+        }
+        button:hover { background-color: #34495e; transform: translateY(-2px); }
+        button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+
+        #pairings-history {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            width: 100%;
+        }
+        .round-column {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+            min-width: 140px;
+            border-top: 5px solid #3498db;
+            animation: fadeIn 0.5s ease-out forwards;
+        }
+        .round-column h3 {
+            margin: 0 0 10px 0;
+            font-size: 18px;
+            color: #2c3e50;
+            text-align: center;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 5px;
+        }
+        .pairing-item {
+            padding: 8px 0;
+            text-align: center;
+            font-size: 16px;
+            font-weight: 500;
+        }
+        .pairing-item span { color: #e74c3c; font-weight: bold; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Berger módszer</h1>
+        
+        <div id="animation-area">
+            <!-- Kapcsolatokat jelző vonalak -->
+            <div class="match-line" style="top: 53px;"></div>
+            <div class="match-line" style="top: 163px;"></div>
+            <div class="match-line" style="top: 273px;"></div>
+
+            <!-- Csapatok -->
+            <div id="t1" class="team team-fixed">1</div>
+            <div id="t2" class="team team-moving">2</div>
+            <div id="t3" class="team team-moving">3</div>
+            <div id="t4" class="team team-moving">4</div>
+            <div id="t5" class="team team-moving">5</div>
+            <div id="t6" class="team team-moving">6</div>
+        </div>
+
+        <button id="nextBtn" onclick="nextRound()">Következő forduló</button>
+
+        <div id="pairings-history">
+            <!-- Ide kerülnek a fordulók oszlopai -->
+        </div>
+    </div>
+
+    <script>
+        const pos = {
+            fixed: { x: 40, y: 30 },  // Bal-fent
+            topR:  { x: 250, y: 30 }, // Jobb-fent
+            midR:  { x: 250, y: 140 },// Jobb-közép
+            botR:  { x: 250, y: 250 },// Jobb-lent
+            botL:  { x: 40, y: 250 }, // Bal-lent
+            midL:  { x: 40, y: 140 }  // Bal-közép
+        };
+
+        // A forgási kör sorrendje (U-alak az óramutató járása szerint a rögzített pont körül)
+        // A rögzített az 1-es (pos.fixed)
+        // A többiek pozíciói: topR -> midR -> botR -> botL -> midL -> topR...
+        const path = [pos.topR, pos.midR, pos.botR, pos.botL, pos.midL];
+
+        // Kezdőállapot (1. forduló)
+        // 1-6, 2-5, 3-4
+        let currentRotation = [6, 5, 4, 3, 2]; // Az óramutató járása szerinti sorrendben a path-en
+        let round = 0;
+        const maxRounds = 5;
+
+        function updateAnimation() {
+            // Fix 1-es
+            document.getElementById('t1').style.left = pos.fixed.x + 'px';
+            document.getElementById('t1').style.top = pos.fixed.y + 'px';
+
+            // Forgó csapatok elhelyezése
+            for (let i = 0; i < currentRotation.length; i++) {
+                const teamNum = currentRotation[i];
+                const targetPos = path[i];
+                const el = document.getElementById('t' + teamNum);
+                el.style.left = targetPos.x + 'px';
+                el.style.top = targetPos.y + 'px';
+            }
+        }
+
+        function addRoundToHistory() {
+            const history = document.getElementById('pairings-history');
+            const col = document.createElement('div');
+            col.className = 'round-column';
+            
+            let html = `<h3>${round}. forduló</h3>`;
+            
+            // Párosítások lekérése a jelenlegi pozíciók alapján
+            // Pos[fixed] vs Pos[0] (topR)
+            // Pos[4] (midL) vs Pos[1] (midR)
+            // Pos[3] (botL) vs Pos[2] (botR)
+            
+            const p1 = `1 – ${currentRotation[0]}`;
+            const p2 = `${currentRotation[4]} – ${currentRotation[1]}`;
+            const p3 = `${currentRotation[3]} – ${currentRotation[2]}`;
+            
+            html += `<div class="pairing-item">${p1}</div>`;
+            html += `<div class="pairing-item">${p2}</div>`;
+            html += `<div class="pairing-item">${p3}</div>`;
+            
+            col.innerHTML = html;
+            history.appendChild(col);
+        }
+
+        function nextRound() {
+            if (round >= maxRounds) {
+                // Újraindítás ha végigértünk
+                round = 0;
+                document.getElementById('pairings-history').innerHTML = '';
+                document.getElementById('nextBtn').innerText = 'Következő forduló';
+                currentRotation = [6, 5, 4, 3, 2];
+            }
+
+            round++;
+            
+            // Az első fordulóban csak kirajzoljuk az alapállapotot
+            if (round > 1) {
+                // Forgatás: az utolsó elem kerül az elejére (óra járása szerint)
+                const last = currentRotation.pop();
+                currentRotation.unshift(last);
+            }
+
+            updateAnimation();
+            addRoundToHistory();
+
+            if (round === maxRounds) {
+                document.getElementById('nextBtn').innerText = 'Bajnokság vége (Újrakezdés)';
+            }
+        }
+
+        // Kezdés az első fordulóval
+        nextRound();
+    </script>
+</body>
+</html>
