@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Útvonalkereső</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        .controls {
+            background: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+            width: 100%;
+            max-width: 800px;
+            box-sizing: border-box;
+        }
+        input[type="text"] {
+            padding: 8px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 150px;
+        }
+        button {
+            padding: 8px 16px;
+            font-size: 16px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .btn-random {
+            background-color: #9b59b6;
+        }
+        .btn-random:hover {
+            background-color: #8e44ad;
+        }
+        .btn-reset {
+            background-color: #e67e22;
+        }
+        .btn-reset:hover {
+            background-color: #d35400;
+        }
+        canvas {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            cursor: pointer;
+            max-width: 100%;
+            height: auto;
+            touch-action: manipulation;
+        }
+        .status-panel {
+            margin-top: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 800px;
+            box-sizing: border-box;
+            text-align: center;
+        }
+        .status-panel h2 {
+            margin: 0 0 10px 0;
+            font-size: 20px;
+        }
+        #resultMessage {
+            font-size: 18px;
+            font-weight: bold;
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        .neutral-result {
+            background-color: #e8f4f8;
+            color: #2c3e50;
+            border: 1px solid #b8daff;
+        }
+        .best-score {
+            color: #27ae60;
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+        .best-path-text {
+            color: #555;
+            font-size: 0.9em;
+            margin-left: 10px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Útvonalkereső</h1>
+    
+    <div class="controls">
+        <label for="seedInput"><strong>Térkép kódja (Seed):</strong></label>
+        <input type="text" id="seedInput" value="Budapest2026">
+        <button onclick="initGame()">Térkép Generálása</button>
+        <button class="btn-random" onclick="generateRandomMap()">Véletlenszerű Térkép</button>
+        <button class="btn-reset" onclick="resetPath()">Útvonal Újrakezdése</button>
+    </div>
+
+    <canvas id="gameCanvas" width="800" height="500"></canvas>
+
+    <div class="status-panel">
+        <h2>Jelenlegi Állapot</h2>
+        <p><strong>Útvonal:</strong> <span id="pathDisplay">Start</span></p>
+        <p><strong>Összköltség:</strong> <span id="costDisplay">0</span></p>
+        <p>
+            <strong>Eddigi legjobb (ezen a térképen):</strong> 
+            <span id="bestCostDisplay" class="best-score">-</span>
+            <span id="bestPathDisplay" class="best-path-text"></span>
+        </p>
+        <div id="resultMessage"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let nodes = [];
+        let edges = [];
+        let numNodes = 0;
+        let rng = Math.random;
+        
+        let currentPath = [];
+        let currentCost = 0;
+        let gameFinished = false;
+        
+        // Eddigi legjobb eredmény és a hozzá tartozó útvonal tárolása
+        let bestUserCost = Infinity;
+        let bestUserPath = [];
+
+        function xmur3(str) {
+            for(var i = 0, h = 1779033703 ^ str.length; i < str.length; i++) {
+                h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+                h = h << 13 | h >>> 19;
+            } return function() {
+                h = Math.imul(h ^ (h >>> 16), 2246822507);
+                h = Math.imul(h ^ (h >>> 13), 3266489909);
+                return (h ^= h >>> 16) >>> 0;
+            }
+        }
+        function mulberry32(a) {
+            return function() {
+              var t = a += 0x6D2B79F5;
+              t = Math.imul(t ^ t >>> 15, t | 1);
+              t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+              return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            }
+        }
+
+        function initGame() {
+            let seedStr = document.getElementById('seedInput').value;
+            if(!seedStr) seedStr = "default";
+            let seed = xmur3(seedStr)();
+            rng = mulberry32(seed);
+
+            // Új térkép esetén lenullázzuk az eddigi legjobb eredményt és útvonalat
+            bestUserCost = Infinity;
+            bestUserPath = [];
+            document.getElementById('bestCostDisplay').innerText = '-';
+            document.getElementById('bestPathDisplay').innerText = '';
+
+            generateGraph();
+            resetPath();
+        }
+
+        function generateRandomMap() {
+            let randomSeed = Math.random().toString(36).substring(2, 8).toUpperCase();
+            document.getElementById('seedInput').value = randomSeed;
+            initGame();
+        }
+
+        function resetPath() {
+            currentPath = [0]; 
+            currentCost = 0;
+            gameFinished = false;
+            
+            document.getElementById('resultMessage').style.display = 'none';
+            updateUI();
+            drawGraph();
+        }
+
+        function ccw(A, B, C) {
+            return (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x);
+        }
+        function doIntersect(p1, p2, p3, p4) {
+            if (p1.id === p3.id || p1.id === p4.id || p2.id === p3.id || p2.id === p4.id) return false;
+            return (ccw(p1, p3, p4) !== ccw(p2, p3, p4)) && (ccw(p1, p2, p3) !== ccw(p1, p2, p4));
+        }
+
+        function distToSegment(P, V, W) {
+            let l2 = (V.x - W.x)**2 + (V.y - W.y)**2;
+            if (l2 === 0) return Math.hypot(P.x - V.x, P.y - V.y);
+            let t = ((P.x - V.x)*(W.x - V.x) + (P.y - V.y)*(W.y - V.y)) / l2;
+            t = Math.max(0, Math.min(1, t));
+            let proj = { x: V.x + t * (W.x - V.x), y: V.y + t * (W.y - V.y) };
+            return Math.hypot(P.x - proj.x, P.y - proj.y);
+        }
+
+        function checkShortcuts(u, v, currentEdges, endNode) {
+            if ((u === 0 && v === endNode) || (v === 0 && u === endNode)) return true;
+            
+            let adj = Array.from({length: endNode + 1}, () => []);
+            for (let e of currentEdges) {
+                adj[e.u].push(e.v);
+                adj[e.v].push(e.u);
+            }
+            adj[u].push(v);
+            adj[v].push(u);
+
+            for (let i = 1; i < endNode; i++) {
+                if (adj[0].includes(i) && adj[endNode].includes(i)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function generateGraph() {
+            nodes = [];
+            edges = [];
+            
+            // 7-10 csúcs generálása
+            numNodes = Math.floor(rng() * 4) + 7; 
+            
+            const margin = 50;
+            const width = canvas.width;
+            const height = canvas.height;
+
+            nodes.push({ id: 0, x: margin, y: height / 2, label: "Start" });
+            nodes.push({ id: 1, x: width - margin, y: height / 2, label: "Cél" });
+
+            for (let i = 2; i < numNodes; i++) {
+                let valid = false;
+                let x, y;
+                let tries = 0;
+                while (!valid && tries < 200) {
+                    x = margin + 60 + rng() * (width - 2 * margin - 120);
+                    y = margin + rng() * (height - 2 * margin);
+                    valid = true;
+                    for (let n of nodes) {
+                        if (Math.hypot(n.x - x, n.y - y) < 60) {
+                            valid = false; break;
+                        }
+                    }
+                    tries++;
+                }
+                nodes.push({ id: i, x: x, y: y, label: "" });
+            }
+
+            let middleNodes = nodes.slice(2).sort((a, b) => a.x - b.x);
+            nodes = [nodes[0], ...middleNodes, nodes[1]];
+
+            for (let i = 0; i < numNodes; i++) {
+                nodes[i].id = i;
+                if (i === 0) nodes[i].label = "Start";
+                else if (i === numNodes - 1) nodes[i].label = "Cél";
+                else nodes[i].label = String.fromCharCode(64 + i); 
+            }
+
+            // Élsúlyok: 5 és 25 között
+            for (let i = 0; i < numNodes - 1; i++) {
+                edges.push({ u: i, v: i+1, weight: Math.floor(rng() * 21) + 5 });
+            }
+
+            let possibleEdges = [];
+            for (let i = 0; i < numNodes; i++) {
+                for (let j = i + 2; j < numNodes; j++) {
+                    possibleEdges.push({u: i, v: j});
+                }
+            }
+            
+            for (let i = possibleEdges.length - 1; i > 0; i--) {
+                const j = Math.floor(rng() * (i + 1));
+                [possibleEdges[i], possibleEdges[j]] = [possibleEdges[j], possibleEdges[i]];
+            }
+
+            for (let e of possibleEdges) {
+                let uNode = nodes[e.u];
+                let vNode = nodes[e.v];
+                
+                if (checkShortcuts(e.u, e.v, edges, numNodes - 1)) continue;
+
+                let intersects = false;
+                for (let existing of edges) {
+                    if (doIntersect(uNode, vNode, nodes[existing.u], nodes[existing.v])) {
+                        intersects = true; break;
+                    }
+                }
+                if (intersects) continue;
+
+                let tooClose = false;
+                for (let n of nodes) {
+                    if (n.id === e.u || n.id === e.v) continue;
+                    if (distToSegment(n, uNode, vNode) < 25) {
+                        tooClose = true; break;
+                    }
+                }
+                if (tooClose) continue;
+
+                edges.push({ u: e.u, v: e.v, weight: Math.floor(rng() * 21) + 5 });
+            }
+        }
+
+        function drawGraph() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            edges.forEach(edge => {
+                let uNode = nodes[edge.u];
+                let vNode = nodes[edge.v];
+                
+                let inPath = false;
+                for(let i=0; i<currentPath.length-1; i++) {
+                    if ((currentPath[i] === edge.u && currentPath[i+1] === edge.v) ||
+                        (currentPath[i] === edge.v && currentPath[i+1] === edge.u)) {
+                        inPath = true;
+                        break;
+                    }
+                }
+
+                ctx.beginPath();
+                ctx.moveTo(uNode.x, uNode.y);
+                ctx.lineTo(vNode.x, vNode.y);
+                ctx.strokeStyle = inPath ? '#3498db' : '#bdc3c7';
+                ctx.lineWidth = inPath ? 4 : 2;
+                ctx.stroke();
+
+                let midX = (uNode.x + vNode.x) / 2;
+                let midY = (uNode.y + vNode.y) / 2;
+                
+                ctx.fillStyle = inPath ? '#2980b9' : '#7f8c8d';
+                ctx.font = 'bold 16px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(midX, midY, 12, 0, Math.PI*2);
+                ctx.fill();
+
+                ctx.fillStyle = inPath ? '#2980b9' : '#333';
+                ctx.fillText(edge.weight, midX, midY);
+            });
+
+            nodes.forEach(node => {
+                let isCurrent = currentPath[currentPath.length - 1] === node.id;
+                let isVisited = currentPath.includes(node.id);
+
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, 20, 0, Math.PI * 2);
+                
+                if (node.id === 0) {
+                    ctx.fillStyle = '#2ecc71'; 
+                } else if (node.id === numNodes - 1) {
+                    ctx.fillStyle = '#e74c3c'; 
+                } else if (isCurrent) {
+                    ctx.fillStyle = '#f1c40f'; 
+                } else if (isVisited) {
+                    ctx.fillStyle = '#3498db'; 
+                } else {
+                    ctx.fillStyle = '#ecf0f1'; 
+                }
+                
+                ctx.fill();
+                ctx.lineWidth = 3;
+                ctx.strokeStyle = isCurrent ? '#f39c12' : '#2c3e50';
+                ctx.stroke();
+
+                ctx.fillStyle = (node.id === 0 || node.id === numNodes -1 || isVisited) ? 'white' : '#2c3e50';
+                if(isCurrent && node.id !== 0 && node.id !== numNodes-1) ctx.fillStyle = '#2c3e50'; 
+                
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                let shortLabel = node.label.length > 2 ? node.label.charAt(0) : node.label;
+                ctx.fillText(shortLabel, node.x, node.y);
+            });
+        }
+
+        function updateUI() {
+            let pathLabels = currentPath.map(id => nodes[id].label).join(' → ');
+            document.getElementById('pathDisplay').innerText = pathLabels;
+            document.getElementById('costDisplay').innerText = currentCost;
+        }
+
+        canvas.addEventListener('click', (e) => {
+            if (gameFinished) return;
+
+            const rect = canvas.getBoundingClientRect();
+            
+            // Skálázás mobilos / reszponzív nézethez
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const clickX = (e.clientX - rect.left) * scaleX;
+            const clickY = (e.clientY - rect.top) * scaleY;
+
+            let clickedNode = null;
+            for (let node of nodes) {
+                let dx = clickX - node.x;
+                let dy = clickY - node.y;
+                if (Math.sqrt(dx*dx + dy*dy) <= 20) {
+                    clickedNode = node;
+                    break;
+                }
+            }
+
+            if (clickedNode) {
+                let lastNodeId = currentPath[currentPath.length - 1];
+                
+                if (!currentPath.includes(clickedNode.id)) {
+                    let edge = edges.find(e => (e.u === lastNodeId && e.v === clickedNode.id) || 
+                                               (e.v === lastNodeId && e.u === clickedNode.id));
+                    
+                    if (edge) {
+                        currentPath.push(clickedNode.id);
+                        currentCost += edge.weight;
+                        
+                        updateUI();
+                        drawGraph();
+
+                        if (clickedNode.id === numNodes - 1) {
+                            gameFinished = true;
+                            
+                            // Legjobb eredmény frissítése
+                            let isNewBest = false;
+                            if (currentCost < bestUserCost) {
+                                bestUserCost = currentCost;
+                                bestUserPath = [...currentPath]; // Útvonal másolása
+                                
+                                document.getElementById('bestCostDisplay').innerText = bestUserCost;
+                                
+                                // Útvonal formázása és kiírása
+                                let bestPathLabels = bestUserPath.map(id => nodes[id].label).join(' → ');
+                                document.getElementById('bestPathDisplay').innerText = `(Útvonal: ${bestPathLabels})`;
+                                
+                                isNewBest = true;
+                            }
+
+                            let msgDiv = document.getElementById('resultMessage');
+                            msgDiv.style.display = 'block';
+                            msgDiv.className = 'neutral-result';
+                            
+                            let extraMsg = isNewBest ? "<br><span style='color:#27ae60;'>Ez az eddigi legjobb eredményed ezen a térképen!</span>" : "";
+                            msgDiv.innerHTML = `Célba értél! Az útvonalad összköltsége: ${currentCost}${extraMsg}`;
+                        }
+                    }
+                }
+            }
+        });
+
+        window.onload = initGame;
+    </script>
+</body>
+</html>
