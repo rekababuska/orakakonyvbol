@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ulti bajnokság</title>
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      --panel-bg: rgba(30, 41, 59, 0.75);
+      --panel-border: rgba(255, 255, 255, 0.1);
+      --accent-blue: #38bdf8;
+      --accent-green: #22c55e;
+      --accent-red: #ef4444;
+      --accent-yellow: #f59e0b;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg-gradient);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-size: 2.2rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      background: linear-gradient(to right, #38bdf8, #818cf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .instructions-panel {
+      max-width: 1050px;
+      width: 100%;
+      background: rgba(15, 23, 42, 0.7);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-left: 5px solid var(--accent-blue);
+      border-radius: 12px;
+      padding: 14px 20px;
+      margin-bottom: 20px;
+      font-size: 0.95rem;
+      line-height: 1.6;
+      color: #cbd5e1;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    }
+
+    .instructions-panel h2 {
+      font-size: 1.05rem;
+      color: var(--accent-blue);
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .instructions-panel ul {
+      margin-left: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 24px;
+      max-width: 1050px;
+      width: 100%;
+      justify-content: center;
+    }
+
+    .card {
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+
+    .controls-card {
+      flex: 1 1 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .canvas-card {
+      flex: 1 1 480px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+
+    .n-selector {
+      display: flex;
+      gap: 8px;
+      background: rgba(15, 23, 42, 0.6);
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid var(--panel-border);
+    }
+
+    .n-btn {
+      flex: 1;
+      padding: 10px 12px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-weight: 700;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .n-btn.active {
+      background: var(--accent-blue);
+      color: #0f172a;
+      box-shadow: 0 2px 8px rgba(56, 189, 248, 0.4);
+    }
+
+    .btn-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .btn {
+      padding: 12px 14px;
+      border: none;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 0.95rem;
+    }
+
+    .btn-primary {
+      background: #3b82f6;
+      color: white;
+    }
+    .btn-primary:hover { background: #2563eb; }
+
+    .btn-accent {
+      background: #10b981;
+      color: white;
+    }
+    .btn-accent:hover { background: #059669; }
+
+    .btn-danger {
+      background: #ef4444;
+      color: white;
+    }
+    .btn-danger:hover { background: #dc2626; }
+
+    .btn-warning {
+      background: #f59e0b;
+      color: white;
+    }
+    .btn-warning:hover { background: #d97706; }
+
+    .status-box {
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 10px;
+      padding: 12px 16px;
+      border: 1px solid var(--panel-border);
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+    }
+    .status-row:last-child { margin-bottom: 0; }
+
+    .status-val {
+      font-weight: 700;
+      color: var(--accent-blue);
+    }
+
+    .triangles-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 180px;
+      overflow-y: auto;
+    }
+
+    .triangle-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 12px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+
+    .triangle-badge {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 8px;
+    }
+
+    .alert {
+      padding: 14px 16px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .alert-error {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid var(--accent-red);
+      color: #fca5a5;
+    }
+
+    .alert-success {
+      background: rgba(34, 197, 94, 0.2);
+      border: 1px solid var(--accent-green);
+      color: #86efac;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    svg {
+      width: 100%;
+      height: auto;
+      max-width: 480px;
+      aspect-ratio: 1;
+      overflow: visible;
+    }
+
+    .vertex {
+      cursor: pointer;
+      transition: r 0.2s ease, fill 0.2s ease;
+    }
+
+    .vertex-hitbox {
+      cursor: pointer;
+      fill: transparent;
+    }
+
+    .vertex-label {
+      font-weight: 800;
+      font-size: 15px;
+      fill: #ffffff;
+      pointer-events: none;
+      text-anchor: middle;
+      dominant-baseline: central;
+    }
+
+    .edge-line {
+      stroke-width: 3;
+      stroke-linecap: round;
+      transition: stroke 0.3s ease;
+    }
+
+    .edge-collision {
+      stroke: var(--accent-red) !important;
+      stroke-width: 6 !important;
+      animation: pulseRed 0.8s infinite alternate;
+    }
+
+    @keyframes pulseRed {
+      from { opacity: 0.5; stroke-width: 4; }
+      to { opacity: 1; stroke-width: 8; }
+    }
+
+    #confetti-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 9999;
+    }
+  </style>
+</head>
+<body>
+
+  <canvas id="confetti-canvas"></canvas>
+
+  <header>
+    <h1>Ulti bajnokság</h1>
+  </header>
+
+  <div class="instructions-panel">
+    <h2>📌 Útmutató a feladathoz:</h2>
+    <ul>
+      <li><strong>Háromszögek kijelölése:</strong> Kattints a csúcsokra! Három csúcs kiválasztásával azonnal rögzül egy alap-háromszög. Új gomb megnyomása nélkül, közvetlenül kijelölhetsz további háromszögeket is.</li>
+      <li><strong>Léptetés / Körbefuttatás:</strong> A gombok segítségével az összes megadott alap-háromszöget egyszerre forgathatod el a kör mentén.</li>
+      <li><strong>Cél:</strong> A teljes gráf összes élét befedni úgy, hogy senki ne játsszon kétszer ugyanazzal az ellenféllel.</li>
+      <li><strong>Nem lehetséges gomb:</strong> Ha úgy látod, hogy az adott csúcsszámra nem létezik szabályos körbeforgatós lefedés, kattints erre a gombra!</li>
+    </ul>
+  </div>
+
+  <div class="container">
+    
+    <div class="card controls-card">
+      <div class="n-selector">
+        <button class="n-btn active" onclick="setN(7)">7 csúcs</button>
+        <button class="n-btn" onclick="setN(8)">8 csúcs</button>
+        <button class="n-btn" onclick="setN(9)">9 csúcs</button>
+        <button class="n-btn" onclick="setN(13)">13 csúcs</button>
+      </div>
+
+      <div class="status-box">
+        <div class="status-row">
+          <span>Lefedett élek:</span>
+          <span class="status-val" id="edges-count">0 / 21</span>
+        </div>
+        <div class="status-row">
+          <span>Kijelölés alatt:</span>
+          <span class="status-val" id="selection-status">0 / 3 csúcs</span>
+        </div>
+      </div>
+
+      <div id="alert-banner" class="alert"></div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" onclick="stepRotation()">Léptetés (+1)</button>
+        <button class="btn btn-accent" id="auto-btn" onclick="toggleAutoRun()">Körbefuttatás</button>
+        <button class="btn btn-danger" onclick="resetBoard()">Újrakezdés</button>
+        <button class="btn btn-warning" onclick="checkImpossible()">Nem lehetséges</button>
+      </div>
+
+      <div>
+        <h3 style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 8px;">Megadott alap-háromszögek:</h3>
+        <div class="triangles-list" id="triangles-list">
+          <div style="color: var(--text-muted); font-size: 0.85rem; font-style: italic;">Még nincs kijelölt háromszög.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card canvas-card">
+      <svg id="graph-svg" viewBox="0 0 500 500">
+        <g id="edges-layer"></g>
+        <g id="active-edges-layer"></g>
+        <g id="vertices-layer"></g>
+      </svg>
+    </div>
+
+  </div>
+
+  <script>
+    const COLORS = ['#38bdf8', '#f43f5e', '#10b981', '#fbbf24', '#a855f7', '#ec4899', '#06b6d4'];
+    const LABELS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M'];
+
+    let N = 7;
+    let baseTriangles = [];
+    let currentSelection = [];
+    let drawnEdges = new Map();
+    let autoInterval = null;
+    let collisionEdgeKey = null;
+
+    function getTotalEdges(n) {
+      return (n * (n - 1)) / 2;
+    }
+
+    function setN(newN) {
+      if (autoInterval) stopAutoRun();
+      N = newN;
+      document.querySelectorAll('.n-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.textContent.includes(N));
+      });
+      resetBoard();
+    }
+
+    function getVertexCoords(index, n) {
+      const cx = 250, cy = 250, r = 180;
+      const angle = (2 * Math.PI * index / n) - (Math.PI / 2);
+      return {
+        x: cx + r * Math.cos(angle),
+        y: cy + r * Math.sin(angle)
+      };
+    }
+
+    function makeEdgeKey(u, v) {
+      return u < v ? `${u}-${v}` : `${v}-${u}`;
+    }
+
+    function renderBoard() {
+      const vLayer = document.getElementById('vertices-layer');
+      const eLayer = document.getElementById('edges-layer');
+      const activeELayer = document.getElementById('active-edges-layer');
+
+      vLayer.innerHTML = '';
+      eLayer.innerHTML = '';
+      activeELayer.innerHTML = '';
+
+      // 1. Meglévő élek kirajzolása folytonos vonallal
+      drawnEdges.forEach((edgeData, key) => {
+        const [u, v] = key.split('-').map(Number);
+        const p1 = getVertexCoords(u, N);
+        const p2 = getVertexCoords(v, N);
+
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', p1.x);
+        line.setAttribute('y1', p1.y);
+        line.setAttribute('x2', p2.x);
+        line.setAttribute('y2', p2.y);
+        line.setAttribute('class', 'edge-line' + (key === collisionEdgeKey ? ' edge-collision' : ''));
+        line.setAttribute('stroke', key === collisionEdgeKey ? '#ef4444' : edgeData.color);
+        eLayer.appendChild(line);
+      });
+
+      // 2. Éppen kijelölés alatt álló háromszög élei
+      if (currentSelection.length >= 2) {
+        const color = COLORS[baseTriangles.length % COLORS.length];
+        const drawSegment = (u, v) => {
+          const p1 = getVertexCoords(u, N);
+          const p2 = getVertexCoords(v, N);
+          const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+          line.setAttribute('x1', p1.x);
+          line.setAttribute('y1', p1.y);
+          line.setAttribute('x2', p2.x);
+          line.setAttribute('y2', p2.y);
+          line.setAttribute('class', 'edge-line');
+          line.setAttribute('stroke', color);
+          activeELayer.appendChild(line);
+        };
+
+        drawSegment(currentSelection[0], currentSelection[1]);
+        if (currentSelection.length === 3) {
+          drawSegment(currentSelection[1], currentSelection[2]);
+          drawSegment(currentSelection[2], currentSelection[0]);
+        }
+      }
+
+      // 3. Csúcsok kirajzolása nagy kényelmes hitboxszal
+      for (let i = 0; i < N; i++) {
+        const pos = getVertexCoords(i, N);
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('cx', pos.x);
+        circle.setAttribute('cy', pos.y);
+        circle.setAttribute('r', '18');
+        
+        const isSelected = currentSelection.includes(i);
+        circle.setAttribute('fill', isSelected ? '#38bdf8' : '#1e293b');
+        circle.setAttribute('stroke', isSelected ? '#ffffff' : '#38bdf8');
+        circle.setAttribute('stroke-width', isSelected ? '4' : '2');
+        circle.setAttribute('class', 'vertex');
+
+        const hitbox = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        hitbox.setAttribute('cx', pos.x);
+        hitbox.setAttribute('cy', pos.y);
+        hitbox.setAttribute('r', '30');
+        hitbox.setAttribute('class', 'vertex-hitbox');
+        hitbox.onclick = () => onVertexClick(i);
+
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', pos.x);
+        text.setAttribute('y', pos.y);
+        text.setAttribute('class', 'vertex-label');
+        text.textContent = LABELS[i];
+
+        group.appendChild(circle);
+        group.appendChild(text);
+        group.appendChild(hitbox);
+        vLayer.appendChild(group);
+      }
+
+      document.getElementById('edges-count').textContent = `${drawnEdges.size} / ${getTotalEdges(N)}`;
+      document.getElementById('selection-status').textContent = `${currentSelection.length} / 3 csúcs`;
+
+      renderTrianglesList();
+    }
+
+    function onVertexClick(index) {
+      hideAlert();
+      collisionEdgeKey = null;
+
+      if (currentSelection.includes(index)) return;
+
+      if (currentSelection.length < 3) {
+        currentSelection.push(index);
+        if (currentSelection.length === 3) {
+          commitTriangle();
+        }
+      } else {
+        currentSelection = [index];
+      }
+
+      renderBoard();
+    }
+
+    function commitTriangle() {
+      const [u, v, w] = currentSelection;
+      const edges = [makeEdgeKey(u, v), makeEdgeKey(v, w), makeEdgeKey(w, u)];
+      
+      // Ütközésvizsgálat
+      for (let key of edges) {
+        if (drawnEdges.has(key)) {
+          const [p1, p2] = key.split('-').map(Number);
+          showError(`Hiba. A ${LABELS[p1]} és a ${LABELS[p2]} játékos két partiban is találkozna egymással`);
+          collisionEdgeKey = key;
+          currentSelection = [];
+          renderBoard();
+          return;
+        }
+      }
+
+      const color = COLORS[baseTriangles.length % COLORS.length];
+      baseTriangles.push({
+        vertices: [u, v, w],
+        color: color,
+        step: 0
+      });
+
+      edges.forEach(key => drawnEdges.set(key, { color }));
+      currentSelection = [];
+
+      checkVictory();
+    }
+
+    function stepRotation() {
+      if (baseTriangles.length === 0) {
+        showError("Először jelölj ki legalább egy kezdő-háromszöget!");
+        return;
+      }
+
+      hideAlert();
+      collisionEdgeKey = null;
+
+      let newStepEdges = [];
+
+      for (let tri of baseTriangles) {
+        const nextStep = tri.step + 1;
+        const u = (tri.vertices[0] + nextStep) % N;
+        const v = (tri.vertices[1] + nextStep) % N;
+        const w = (tri.vertices[2] + nextStep) % N;
+
+        const keys = [makeEdgeKey(u, v), makeEdgeKey(v, w), makeEdgeKey(w, u)];
+
+        for (let key of keys) {
+          if (drawnEdges.has(key)) {
+            const [p1, p2] = key.split('-').map(Number);
+            showError(`Hiba. A ${LABELS[p1]} és a ${LABELS[p2]} játékos két partiban is találkozna egymással`);
+            collisionEdgeKey = key;
+            if (autoInterval) stopAutoRun();
+            renderBoard();
+            return;
+          }
+          newStepEdges.push({ key, color: tri.color });
+        }
+      }
+
+      // Az összes megadott alap-háromszög egyszerre léptetése
+      for (let tri of baseTriangles) {
+        tri.step += 1;
+      }
+      newStepEdges.forEach(e => drawnEdges.set(e.key, { color: e.color }));
+
+      renderBoard();
+      checkVictory();
+    }
+
+    function checkImpossible() {
+      hideAlert();
+      collisionEdgeKey = null;
+
+      if (N === 8) {
+        showSuccess("Helyes! 8 csúcsra nem létezik ulti-bajnokság.");
+        triggerConfetti();
+      } else if (N === 9) {
+        showSuccess("Helyes! 9 csúcsra  nem létezik tiszta körbeforgatós megoldás!");
+        triggerConfetti();
+      } else {
+        showError(`Helytelen! A(z) ${N} csúcsos esetre létezik érvényes körbeforgatós elrendezés.`);
+      }
+    }
+
+    function checkVictory() {
+      if (drawnEdges.size === getTotalEdges(N)) {
+        showSuccess("Gratulálok! Sikeresen megszervezted az ulti-bajnokságot!");
+        triggerConfetti();
+        if (autoInterval) stopAutoRun();
+      }
+    }
+
+    function toggleAutoRun() {
+      if (autoInterval) {
+        stopAutoRun();
+      } else {
+        if (baseTriangles.length === 0) {
+          showError("Először jelölj ki legalább egy kezdő-háromszöget!");
+          return;
+        }
+        document.getElementById('auto-btn').textContent = "Megállítás";
+        autoInterval = setInterval(stepRotation, 600);
+      }
+    }
+
+    function stopAutoRun() {
+      clearInterval(autoInterval);
+      autoInterval = null;
+      document.getElementById('auto-btn').textContent = "Körbefuttatás";
+    }
+
+    function resetBoard() {
+      if (autoInterval) stopAutoRun();
+      baseTriangles = [];
+      currentSelection = [];
+      drawnEdges.clear();
+      collisionEdgeKey = null;
+      hideAlert();
+      renderBoard();
+    }
+
+    function renderTrianglesList() {
+      const container = document.getElementById('triangles-list');
+      if (baseTriangles.length === 0) {
+        container.innerHTML = '<div style="color: var(--text-muted); font-size: 0.85rem; font-style: italic;">Még nincs kijelölt háromszög.</div>';
+        return;
+      }
+
+      container.innerHTML = baseTriangles.map((tri, i) => `
+        <div class="triangle-item">
+          <div>
+            <span class="triangle-badge" style="background: ${tri.color}"></span>
+            <strong>${i + 1}. háromszög:</strong> ${LABELS[tri.vertices[0]]}-${LABELS[tri.vertices[1]]}-${LABELS[tri.vertices[2]]}
+          </div>
+          <span style="color: var(--text-muted); font-size: 0.8rem;">Lépés: ${tri.step}</span>
+        </div>
+      `).join('');
+    }
+
+    function showError(msg) {
+      const banner = document.getElementById('alert-banner');
+      banner.className = "alert alert-error";
+      banner.textContent = msg;
+      banner.style.display = "block";
+    }
+
+    function showSuccess(msg) {
+      const banner = document.getElementById('alert-banner');
+      banner.className = "alert alert-success";
+      banner.textContent = msg;
+      banner.style.display = "block";
+    }
+
+    function hideAlert() {
+      document.getElementById('alert-banner').style.display = "none";
+    }
+
+    function triggerConfetti() {
+      const canvas = document.getElementById('confetti-canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+
+      const particles = Array.from({ length: 120 }).map(() => ({
+        x: Math.random() * canvas.width,
+        y: -10,
+        color: COLORS[Math.floor(Math.random() * COLORS.length)],
+        size: Math.random() * 8 + 4,
+        vx: (Math.random() - 0.5) * 4,
+        vy: Math.random() * 5 + 2
+      }));
+
+      let frames = 0;
+      function animate() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        particles.forEach(p => {
+          p.x += p.vx;
+          p.y += p.vy;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        if (frames++ < 180) {
+          requestAnimationFrame(animate);
+        } else {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+      }
+      animate();
+    }
+
+    renderBoard();
+  </script>
+</body>
+</html>
