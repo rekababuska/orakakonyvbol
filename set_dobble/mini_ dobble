@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Saját Dobble Pakli Tervező</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Google Fonts: Inter for clean modern educational aesthetic -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+            overflow-x: hidden;
+            width: 100%;
+        }
+
+        /* Modern Card Styling */
+        .modern-card {
+            background-color: #ffffff;
+            border-radius: 1rem;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+            border: 1px solid #e2e8f0;
+        }
+
+        .modern-btn {
+            border-radius: 0.625rem;
+            font-weight: 600;
+            transition: all 0.15s ease-in-out;
+            touch-action: manipulation;
+        }
+
+        .modern-btn:active {
+            transform: scale(0.97);
+        }
+
+        /* SVG Icon Helper */
+        .icon-svg {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .icon-svg svg {
+            width: 82%;
+            height: 82%;
+            filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.08));
+        }
+
+        /* Fano Plane SVG Interactivity - No Scale Transforms to prevent jitter */
+        .fano-line-path {
+            transition: stroke-width 0.2s ease, stroke 0.2s ease, filter 0.2s ease;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        .fano-line-path:hover {
+            stroke-width: 7.5px;
+            filter: drop-shadow(0 0 6px rgba(59, 130, 246, 0.45));
+        }
+
+        .fano-line-path.active-line {
+            stroke-width: 8px;
+            stroke: #2563eb !important;
+            filter: drop-shadow(0 0 8px rgba(37, 99, 235, 0.6));
+        }
+
+        .fano-node-group {
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+
+        .fano-node-group circle {
+            transition: fill 0.2s ease, stroke 0.2s ease, stroke-width 0.2s ease, filter 0.2s ease;
+        }
+
+        .fano-node-group:hover circle {
+            stroke: #2563eb;
+            stroke-width: 3.5px;
+            fill: #eff6ff;
+            filter: drop-shadow(0 2px 6px rgba(37, 99, 235, 0.25));
+        }
+
+        .fano-node-group.active-node circle {
+            stroke: #1d4ed8 !important;
+            stroke-width: 4px !important;
+            fill: #dbeafe !important;
+            filter: drop-shadow(0 2px 8px rgba(29, 78, 216, 0.35));
+        }
+
+        /* Modal Overlay & Animations */
+        .modal-backdrop {
+            background-color: rgba(15, 23, 42, 0.55);
+            backdrop-filter: blur(4px);
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-slide-up {
+            animation: slideUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-2.5 sm:p-5">
+
+    <!-- HEADER -->
+    <header class="max-w-4xl mx-auto w-full text-center py-2 px-1 mb-1">
+        <h1 class="text-xl sm:text-2xl md:text-3xl font-bold text-slate-800 tracking-tight">
+            Saját Dobble Pakli Tervező
+        </h1>
+        <p class="text-xs sm:text-sm text-slate-600 max-w-xl mx-auto mt-1 leading-relaxed">
+            Készíts egy 7 kártyából álló Dobble játékot! Válassz ki 7 figurát, majd rendezd el őket a kártyákon úgy, hogy <strong>bármely két kártyának pontosan egy közös figurája</strong> legyen.
+        </p>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main class="max-w-4xl mx-auto w-full space-y-3 sm:space-y-4 flex-grow">
+
+        <!-- 1. FIGURATÁR (15 SYMBOLS POOL) -->
+        <section class="modern-card p-3 sm:p-4">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-2 pb-2 border-b border-slate-100">
+                <h2 class="text-xs sm:text-base font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>🎨</span> Figuratár
+                </h2>
+                <div class="flex items-center gap-1.5">
+                    <span id="pool-badge" class="text-[11px] sm:text-xs font-semibold px-2 py-0.5 sm:py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        Kiválasztva: 7 / 7
+                    </span>
+                    <button id="btn-random-pool" class="text-[11px] sm:text-xs font-semibold px-2.5 py-1 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-lg border border-slate-200 transition">
+                        🎲 Véletlenszerű 7
+                    </button>
+                </div>
+            </div>
+
+            <p class="text-[11px] sm:text-xs text-slate-500 mb-2">Kattints a figurákra a kijelöléshez vagy cseréhez (pontosan 7 figura szükséges):</p>
+
+            <!-- 15 SYMBOLS GRID -->
+            <div id="symbol-pool-grid" class="grid grid-cols-5 min-[400px]:grid-cols-8 md:grid-cols-15 gap-1.5 sm:gap-2">
+                <!-- Populated via JS -->
+            </div>
+        </section>
+
+        <!-- 2. CARDS BUILDER (7 CARDS AT ONCE) -->
+        <section class="modern-card p-3 sm:p-4">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5 pb-2 border-b border-slate-100">
+                <h2 class="text-xs sm:text-base font-bold text-slate-800 flex items-center gap-1.5">
+                    <span>🂠</span> Kártyák kitöltése
+                </h2>
+                <div class="flex items-center gap-1.5">
+                    <button id="btn-clear-all" class="text-xs font-semibold px-2.5 py-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg border border-slate-200 transition">
+                        🗑️ Törlés
+                    </button>
+                    <button id="btn-validate" class="modern-btn text-xs sm:text-sm px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white shadow-xs flex items-center gap-1 transition">
+                        <span>🔍</span> Ellenőrzés
+                    </button>
+                </div>
+            </div>
+
+            <!-- ALL 7 CIRCULAR CARDS GRID -->
+            <div id="deck-container" class="grid grid-cols-2 min-[360px]:grid-cols-3 sm:grid-cols-4 md:grid-cols-7 gap-2 sm:gap-3">
+                <!-- Generated via JS -->
+            </div>
+
+            <!-- VALIDATION ALERT BANNER -->
+            <div id="validation-banner" class="mt-3 hidden rounded-xl p-3 text-xs sm:text-sm transition-all"></div>
+
+            <!-- "LEHET EGYSZERŰBBEN?" BUTTON - REVEALED UPON SUCCESS -->
+            <div id="fano-reveal-container" class="mt-4 hidden text-center">
+                <button id="btn-open-fano" class="modern-btn px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-sm sm:text-base font-bold shadow-md hover:shadow-lg transition flex items-center justify-center gap-2 mx-auto w-full sm:w-auto">
+                    <span>Lehet egyszerűbben?</span>
+                </button>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="max-w-4xl mx-auto w-full text-center py-2 text-[11px] sm:text-xs text-slate-400 mt-2">
+        Saját Dobble Pakli Tervező &bull; Kombinatorika és projektív sík
+    </footer>
+
+
+    <!-- TOUCH-FRIENDLY BOTTOM SHEET / MODAL FOR SLOT SYMBOL SELECTION -->
+    <div id="slot-modal" class="fixed inset-0 modal-backdrop hidden items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+        <div class="modern-card max-w-md w-full p-4 space-y-3 shadow-2xl border border-slate-200 animate-slide-up rounded-b-none sm:rounded-b-2xl rounded-t-2xl">
+            <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+                <h3 id="modal-slot-title" class="font-bold text-slate-800 text-xs sm:text-sm">Válassz figurát:</h3>
+                <button onclick="closeSlotModal()" class="text-slate-400 hover:text-slate-700 font-bold text-2xl leading-none px-2 py-1">&times;</button>
+            </div>
+
+            <!-- Active 7 Symbols Grid -->
+            <div id="modal-symbols-grid" class="grid grid-cols-4 sm:grid-cols-7 gap-2 py-1">
+                <!-- Filled via JS -->
+            </div>
+
+            <div class="flex justify-between border-t border-slate-100 pt-2.5 gap-2">
+                <button onclick="clearCurrentSlot()" class="text-xs font-semibold px-3 py-2 bg-rose-50 text-rose-700 rounded-xl border border-rose-200 hover:bg-rose-100 active:bg-rose-200">
+                    🚫 Mező törlése
+                </button>
+                <button onclick="closeSlotModal()" class="text-xs font-semibold px-4 py-2 bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200">
+                    Mégse
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- FANO PLANE MODAL ("LEHET EGYSZERŰBBEN?") -->
+    <div id="fano-modal" class="fixed inset-0 modal-backdrop hidden items-center justify-center z-50 p-2 sm:p-4">
+        <div class="modern-card max-w-3xl w-full p-3.5 sm:p-5 space-y-3 shadow-2xl border border-slate-200 relative max-h-[95vh] overflow-y-auto my-auto rounded-2xl">
+            
+            <!-- Modal Header -->
+            <div class="flex justify-between items-center border-b border-slate-100 pb-2 sticky top-0 bg-white z-10">
+                <h3 class="font-bold text-slate-800 text-base sm:text-xl">
+                    Fano-sík
+                </h3>
+                <button onclick="closeFanoModal()" class="text-slate-400 hover:text-slate-700 font-bold text-2xl leading-none px-2 py-1">&times;</button>
+            </div>
+
+            <!-- Fano Plane SVG & Card Preview -->
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+                
+                <!-- SVG Fano Plane -->
+                <div class="md:col-span-7 bg-slate-50 rounded-2xl p-2 border border-slate-100 flex flex-col items-center justify-center">
+                    <svg viewBox="0 0 500 460" class="w-full max-w-[300px] sm:max-w-[340px] h-auto drop-shadow-2xs" id="fano-svg">
+                        <!-- 7 High Contrast Lines -->
+                        <line id="fano-line-0" class="fano-line-path" x1="250" y1="50" x2="60" y2="380" stroke="#ef4444" stroke-width="5" stroke-linecap="round" onclick="handleFanoLineClick(0)"/>
+                        <line id="fano-line-1" class="fano-line-path" x1="250" y1="50" x2="440" y2="380" stroke="#f97316" stroke-width="5" stroke-linecap="round" onclick="handleFanoLineClick(1)"/>
+                        <line id="fano-line-2" class="fano-line-path" x1="60" y1="380" x2="440" y2="380" stroke="#10b981" stroke-width="5" stroke-linecap="round" onclick="handleFanoLineClick(2)"/>
+                        <line id="fano-line-3" class="fano-line-path" x1="250" y1="50" x2="250" y2="380" stroke="#ec4899" stroke-width="5" stroke-linecap="round" onclick="handleFanoLineClick(3)"/>
+                        <line id="fano-line-4" class="fano-line-path" x1="60" y1="380" x2="345" y2="215" stroke="#06b6d4" stroke-width="5" stroke-linecap="round" onclick="handleFanoLineClick(4)"/>
+                        <line id="fano-line-5" class="fano-line-path" x1="440" y1="380" x2="155" y2="215" stroke="#8b5cf6" stroke-width="5" stroke-linecap="round" onclick="handleFanoLineClick(5)"/>
+                        <circle id="fano-line-6" class="fano-line-path" cx="250" cy="270" r="110" fill="none" stroke="#3b82f6" stroke-width="5" onclick="handleFanoLineClick(6)"/>
+
+                        <!-- 7 Vertices (NO numbers, ONLY icons) -->
+                        <g id="fano-node-1" class="fano-node-group" onclick="handleFanoNodeClick(1)">
+                            <circle cx="250" cy="50" r="24" fill="#ffffff" stroke="#334155" stroke-width="2.5"/>
+                            <foreignObject x="228" y="28" width="44" height="44"><div id="fano-node-icon-1" class="icon-svg"></div></foreignObject>
+                        </g>
+                        <g id="fano-node-2" class="fano-node-group" onclick="handleFanoNodeClick(2)">
+                            <circle cx="60" cy="380" r="24" fill="#ffffff" stroke="#334155" stroke-width="2.5"/>
+                            <foreignObject x="38" y="358" width="44" height="44"><div id="fano-node-icon-2" class="icon-svg"></div></foreignObject>
+                        </g>
+                        <g id="fano-node-3" class="fano-node-group" onclick="handleFanoNodeClick(3)">
+                            <circle cx="440" cy="380" r="24" fill="#ffffff" stroke="#334155" stroke-width="2.5"/>
+                            <foreignObject x="418" y="358" width="44" height="44"><div id="fano-node-icon-3" class="icon-svg"></div></foreignObject>
+                        </g>
+                        <g id="fano-node-4" class="fano-node-group" onclick="handleFanoNodeClick(4)">
+                            <circle cx="155" cy="215" r="24" fill="#ffffff" stroke="#334155" stroke-width="2.5"/>
+                            <foreignObject x="133" y="193" width="44" height="44"><div id="fano-node-icon-4" class="icon-svg"></div></foreignObject>
+                        </g>
+                        <g id="fano-node-5" class="fano-node-group" onclick="handleFanoNodeClick(5)">
+                            <circle cx="345" cy="215" r="24" fill="#ffffff" stroke="#334155" stroke-width="2.5"/>
+                            <foreignObject x="323" y="193" width="44" height="44"><div id="fano-node-icon-5" class="icon-svg"></div></foreignObject>
+                        </g>
+                        <g id="fano-node-6" class="fano-node-group" onclick="handleFanoNodeClick(6)">
+                            <circle cx="250" cy="380" r="24" fill="#ffffff" stroke="#334155" stroke-width="2.5"/>
+                            <foreignObject x="228" y="358" width="44" height="44"><div id="fano-node-icon-6" class="icon-svg"></div></foreignObject>
+                        </g>
+                        <g id="fano-node-7" class="fano-node-group" onclick="handleFanoNodeClick(7)">
+                            <circle cx="250" cy="270" r="24" fill="#ffffff" stroke="#334155" stroke-width="2.5"/>
+                            <foreignObject x="228" y="248" width="44" height="44"><div id="fano-node-icon-7" class="icon-svg"></div></foreignObject>
+                        </g>
+                    </svg>
+                    <p class="text-[11px] text-slate-500 mt-1 italic text-center">Kattints egy egyenesre vagy csúcsra a kártya kijelöléséhez!</p>
+                </div>
+
+                <!-- Right Side: Card Display Panel -->
+                <div class="md:col-span-5 space-y-2">
+                    <div id="fano-card-display-panel" class="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-800 text-center flex flex-col items-center justify-center min-h-[190px]">
+                        <p class="text-xs text-slate-500 italic">
+                            Kattints a Fano-sík bármelyik egyenesére vagy csúcsára a bal oldali ábrán!
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-right border-t border-slate-100 pt-2">
+                <button onclick="closeFanoModal()" class="modern-btn px-4 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs">
+                    Bezárás
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // 1. 15 VECTOR SVG ICONS
+        const ALL_SYMBOLS = [
+            { id: 1,  name: 'Nap',     svg: `<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="5" fill="#f59e0b"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2m-3.172-6.828l-1.414 1.414M6.586 17.414l-1.414 1.414m0-13.656l1.414 1.414m10.828 10.828l1.414 1.414" stroke="#f59e0b" stroke-width="2.5" stroke-linecap="round"/></svg>` },
+            { id: 2,  name: 'Hold',    svg: `<svg viewBox="0 0 24 24" fill="#7c3aed"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>` },
+            { id: 3,  name: 'Csillag', svg: `<svg viewBox="0 0 24 24" fill="#eab308"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>` },
+            { id: 4,  name: 'Szív',    svg: `<svg viewBox="0 0 24 24" fill="#dc2626"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>` },
+            { id: 5,  name: 'Fa',      svg: `<svg viewBox="0 0 24 24" fill="#16a34a"><path d="M12 2L4 12h3l-2 6h5v4h4v-4h5l-2-6h3L12 2z"/></svg>` },
+            { id: 6,  name: 'Könyv',   svg: `<svg viewBox="0 0 24 24" fill="#84cc16"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5v15z" stroke="#65a30d" stroke-width="2"/></svg>` },
+            { id: 7,  name: 'Kulcs',   svg: `<svg viewBox="0 0 24 24" fill="#0d9488"><path d="M7 14A5 5 0 107 4a5 5 0 000 10zm0-7a2 2 0 110 4 2 2 0 010-4z"/><path d="M11 9h11v3h-2v2h-3v-2h-2v2h-4V9z"/></svg>` },
+            { id: 8,  name: 'Korona',  svg: `<svg viewBox="0 0 24 24" fill="#d97706"><path d="M3 18h18v2H3v-2zm1-2l2-9 4 4 2-6 2 6 4-4 2 9H4z"/></svg>` },
+            { id: 9,  name: 'Gomba',   svg: `<svg viewBox="0 0 24 24" fill="#e11d48"><path d="M12 3C6.5 3 2 7.5 2 13h20C22 7.5 17.5 3 12 3z"/><path d="M9 13v7a2 2 0 002 2h2a2 2 0 002-2v-7H9z" fill="#f8fafc"/><circle cx="7" cy="8" r="1.5" fill="#ffffff"/><circle cx="12" cy="6" r="1.5" fill="#ffffff"/><circle cx="17" cy="8" r="1.5" fill="#ffffff"/></svg>` },
+            { id: 10, name: 'Horgony', svg: `<svg viewBox="0 0 24 24" stroke="#0284c7" stroke-width="2.5" fill="none"><circle cx="12" cy="5" r="2.5"/><path d="M12 7.5V21M5 13a7 7 0 0014 0M8 10h8" stroke-linecap="round"/></svg>` },
+            { id: 11, name: 'Olló',    svg: `<svg viewBox="0 0 24 24" stroke="#475569" stroke-width="2" fill="none"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M8.5 7.5L19 18M8.5 16.5L19 6" stroke-linecap="round"/></svg>` },
+            { id: 12, name: 'Hal',     svg: `<svg viewBox="0 0 24 24" fill="#0891b2"><path d="M2 12c4-5 12-5 16 0-4 5-12 5-16 0z"/><path d="M18 12l4-4v8l-4-4z"/><circle cx="6" cy="11" r="1" fill="#ffffff"/></svg>` },
+            { id: 13, name: 'Virág',   svg: `<svg viewBox="0 0 24 24" fill="#db2777"><circle cx="12" cy="12" r="3" fill="#f59e0b"/><circle cx="12" cy="6" r="3" fill="#f472b6"/><circle cx="18" cy="12" r="3" fill="#f472b6"/><circle cx="12" cy="18" r="3" fill="#f472b6"/><circle cx="6" cy="12" r="3" fill="#f472b6"/></svg>` },
+            { id: 14, name: 'Rakéta',  svg: `<svg viewBox="0 0 24 24" fill="#ea580c"><path d="M12 2.5s4.5 3.5 4.5 9.5L12 21.5 7.5 12C7.5 6 12 2.5 12 2.5z"/><circle cx="12" cy="10" r="2" fill="#ffffff"/></svg>` },
+            { id: 15, name: 'Autó',    svg: `<svg viewBox="0 0 24 24" fill="#ca8a04"><path d="M3 12l2-5h14l2 5v6H3v-6z"/><circle cx="7" cy="17" r="2" fill="#1e293b"/><circle cx="17" cy="17" r="2" fill="#1e293b"/><path d="M6 12h12v-3H6v3z" fill="#ffffff"/></svg>` }
+        ];
+
+        // CANONICAL FANO LINES (1-based point triples)
+        const CANONICAL_FANO_LINES = [
+            { id: 0, points: [1, 4, 2] },
+            { id: 1, points: [1, 5, 3] },
+            { id: 2, points: [2, 6, 3] },
+            { id: 3, points: [1, 7, 6] },
+            { id: 4, points: [2, 7, 5] },
+            { id: 5, points: [3, 7, 4] },
+            { id: 6, points: [4, 5, 6] }
+        ];
+
+        // STATE VARIABLES
+        let selectedPoolIds = [1, 2, 3, 4, 5, 6, 7]; // 7 active pool symbols
+        
+        let cardsState = [
+            [null, null, null],
+            [null, null, null],
+            [null, null, null],
+            [null, null, null],
+            [null, null, null],
+            [null, null, null],
+            [null, null, null]
+        ];
+
+        let fanoPointToSymbolMap = {}; 
+        let fanoLineToCardMap = {}; 
+
+        let activeCardIndex = null;
+        let activeSlotIndex = null;
+
+
+        // INITIALIZATION
+        window.addEventListener('DOMContentLoaded', () => {
+            renderSymbolPool();
+            renderDeckCards();
+            setupEventListeners();
+        });
+
+
+        // 1. SYMBOL POOL RENDERING & SELECTION
+        function renderSymbolPool() {
+            const container = document.getElementById('symbol-pool-grid');
+            container.innerHTML = '';
+
+            ALL_SYMBOLS.forEach(sym => {
+                const isSelected = selectedPoolIds.includes(sym.id);
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `p-1 sm:p-1.5 rounded-xl border flex flex-col items-center justify-center transition-all ${
+                    isSelected 
+                        ? 'bg-indigo-50/90 border-indigo-500 ring-2 ring-indigo-500/20 shadow-2xs font-semibold' 
+                        : 'bg-slate-50 border-slate-200 opacity-45 hover:opacity-100 hover:bg-white'
+                }`;
+                btn.onclick = () => togglePoolSymbol(sym.id);
+                btn.innerHTML = `
+                    <div class="w-6 h-6 sm:w-7 sm:h-7 icon-svg">${sym.svg}</div>
+                    <span class="text-[8px] sm:text-[9px] text-slate-700 mt-0.5 truncate w-full text-center">${sym.name}</span>
+                `;
+                container.appendChild(btn);
+            });
+
+            // Update Badge
+            const badge = document.getElementById('pool-badge');
+            badge.innerText = `Kiválasztva: ${selectedPoolIds.length} / 7`;
+            if (selectedPoolIds.length === 7) {
+                badge.className = 'text-[11px] sm:text-xs font-semibold px-2 py-0.5 sm:py-1 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200';
+            } else {
+                badge.className = 'text-[11px] sm:text-xs font-semibold px-2 py-0.5 sm:py-1 rounded-lg bg-amber-100 text-amber-800 border border-amber-200';
+            }
+        }
+
+        function togglePoolSymbol(id) {
+            if (selectedPoolIds.includes(id)) {
+                if (selectedPoolIds.length <= 1) return;
+                selectedPoolIds = selectedPoolIds.filter(x => x !== id);
+            } else {
+                if (selectedPoolIds.length >= 7) {
+                    alert('Már kiválasztottál 7 figurát! Kattints egy kiválasztottra a cseréhez.');
+                    return;
+                }
+                selectedPoolIds.push(id);
+            }
+
+            renderSymbolPool();
+            hideValidationAlert();
+        }
+
+        function selectRandomPool() {
+            const shuffled = [...ALL_SYMBOLS].sort(() => 0.5 - Math.random());
+            selectedPoolIds = shuffled.slice(0, 7).map(s => s.id);
+            renderSymbolPool();
+            hideValidationAlert();
+        }
+
+
+        // 2. DECK BUILDER (7 CIRCULAR CARDS WITH PERFECT EQUILATERAL SLOTS)
+        function renderDeckCards() {
+            const container = document.getElementById('deck-container');
+            container.innerHTML = '';
+
+            cardsState.forEach((card, cardIdx) => {
+                const cardDiv = document.createElement('div');
+                cardDiv.className = 'bg-slate-50/80 rounded-2xl p-1.5 sm:p-2 border border-slate-200 flex flex-col items-center relative transition hover:border-indigo-300';
+                cardDiv.id = `card-element-${cardIdx}`;
+
+                // Card Header
+                const header = document.createElement('div');
+                header.className = 'w-full flex justify-between items-center mb-1 px-1';
+                header.innerHTML = `
+                    <span class="text-[10px] sm:text-xs font-bold text-slate-600">
+                        ${cardIdx + 1}. kártya
+                    </span>
+                    <button onclick="clearSingleCard(${cardIdx})" class="text-[10px] text-slate-400 hover:text-rose-600 p-0.5" title="Törlés">🗑️</button>
+                `;
+                cardDiv.appendChild(header);
+
+                // Circular Disc Container (Strict Aspect Square, Perfectly Centered Slots)
+                const circle = document.createElement('div');
+                circle.className = 'w-full aspect-square max-w-[110px] min-[360px]:max-w-[120px] sm:max-w-[140px] mx-auto rounded-full bg-white border-2 border-slate-300 relative shadow-xs p-1';
+
+                // Slot Positioning (Top 12%, Bottom-Left 12%, Bottom-Right 12%, Size 34%)
+                const slotStyles = [
+                    'top: 12%; left: 50%; transform: translateX(-50%);',
+                    'bottom: 12%; left: 12%;',
+                    'bottom: 12%; right: 12%;'
+                ];
+
+                card.forEach((slotSymId, slotIdx) => {
+                    const slotBtn = document.createElement('button');
+                    slotBtn.type = 'button';
+                    slotBtn.style.cssText = `${slotStyles[slotIdx]} position: absolute; width: 34%; height: 34%;`;
+                    slotBtn.className = `rounded-full flex items-center justify-center transition-all p-0.5 ${
+                        slotSymId 
+                            ? 'bg-indigo-50/90 border border-indigo-400/80 shadow-2xs hover:scale-105' 
+                            : 'bg-slate-50 border-2 border-dashed border-slate-300 text-slate-400 hover:bg-indigo-50 hover:border-indigo-400'
+                    }`;
+
+                    if (slotSymId) {
+                        const sym = ALL_SYMBOLS.find(s => s.id === slotSymId);
+                        slotBtn.innerHTML = sym ? `<div class="icon-svg">${sym.svg}</div>` : '?';
+                    } else {
+                        slotBtn.innerHTML = '<span class="text-[11px] sm:text-xs font-bold text-slate-400">+</span>';
+                    }
+
+                    slotBtn.onclick = () => openSlotModal(cardIdx, slotIdx);
+                    circle.appendChild(slotBtn);
+                });
+
+                cardDiv.appendChild(circle);
+                container.appendChild(cardDiv);
+            });
+        }
+
+
+        // MODAL / BOTTOM SHEET FOR SYMBOL SELECTION
+        function openSlotModal(cardIdx, slotIdx) {
+            if (selectedPoolIds.length < 7) {
+                alert('Először válassz ki 7 figurát a Figuratárban!');
+                return;
+            }
+
+            activeCardIndex = cardIdx;
+            activeSlotIndex = slotIdx;
+
+            const modal = document.getElementById('slot-modal');
+            const grid = document.getElementById('modal-symbols-grid');
+            document.getElementById('modal-slot-title').innerText = `${cardIdx + 1}. kártya — ${slotIdx + 1}. hely`;
+
+            grid.innerHTML = '';
+            selectedPoolIds.forEach(symId => {
+                const sym = ALL_SYMBOLS.find(s => s.id === symId);
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'p-2 bg-slate-50 hover:bg-indigo-50 active:bg-indigo-100 border border-slate-200 hover:border-indigo-400 rounded-xl flex flex-col items-center justify-center transition hover:scale-105 active:scale-95';
+                btn.onclick = () => selectSymbolForSlot(symId);
+                btn.innerHTML = `
+                    <div class="w-8 h-8 sm:w-10 sm:h-10 icon-svg">${sym.svg}</div>
+                    <span class="text-[9px] sm:text-[10px] font-medium text-slate-700 mt-1 truncate w-full text-center">${sym.name}</span>
+                `;
+                grid.appendChild(btn);
+            });
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeSlotModal() {
+            const modal = document.getElementById('slot-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            activeCardIndex = null;
+            activeSlotIndex = null;
+        }
+
+        function selectSymbolForSlot(symId) {
+            if (activeCardIndex !== null && activeSlotIndex !== null) {
+                cardsState[activeCardIndex][activeSlotIndex] = symId;
+                renderDeckCards();
+                closeSlotModal();
+                hideValidationAlert();
+            }
+        }
+
+        function clearCurrentSlot() {
+            if (activeCardIndex !== null && activeSlotIndex !== null) {
+                cardsState[activeCardIndex][activeSlotIndex] = null;
+                renderDeckCards();
+                closeSlotModal();
+                hideValidationAlert();
+            }
+        }
+
+        function clearSingleCard(cardIdx) {
+            cardsState[cardIdx] = [null, null, null];
+            renderDeckCards();
+            hideValidationAlert();
+        }
+
+        function clearAllCards() {
+            cardsState = Array(7).fill(null).map(() => [null, null, null]);
+            renderDeckCards();
+            hideValidationAlert();
+        }
+
+
+        // 3. DECK VALIDATION ALGORITHM
+        function validateDeck() {
+            const banner = document.getElementById('validation-banner');
+            const revealContainer = document.getElementById('fano-reveal-container');
+            
+            // Reset Card Borders
+            for (let i = 0; i < 7; i++) {
+                const el = document.getElementById(`card-element-${i}`);
+                if (el) el.className = el.className.replace(/border-rose-400|border-emerald-500/g, 'border-slate-200');
+            }
+
+            // Check if all 21 slots are filled
+            let filledCount = 0;
+            cardsState.forEach(card => {
+                card.forEach(slot => { if (slot !== null) filledCount++; });
+            });
+
+            if (filledCount < 21) {
+                banner.className = 'mt-3 block rounded-xl p-3 bg-amber-50 border border-amber-200 text-amber-900 animate-slide-up';
+                banner.innerHTML = `
+                    <div class="flex items-center gap-2">
+                        <span class="text-base">⚠️</span>
+                        <div>
+                            <strong class="font-bold">A pakli még hiányos!</strong>
+                            <p class="text-xs text-amber-800">Még ${21 - filledCount} hely üresen áll. Töltsd ki mind a 7 kártya összes mezőjét!</p>
+                        </div>
+                    </div>
+                `;
+                revealContainer.classList.add('hidden');
+                return;
+            }
+
+            // Check Dobble Rule: Every pair of cards shares EXACTLY 1 symbol
+            let errors = [];
+
+            for (let i = 0; i < 7; i++) {
+                for (let j = i + 1; j < 7; j++) {
+                    const cardA = cardsState[i];
+                    const cardB = cardsState[j];
+
+                    const common = cardA.filter(symId => cardB.includes(symId));
+
+                    if (common.length !== 1) {
+                        const commonNames = common.map(id => {
+                            const sym = ALL_SYMBOLS.find(s => s.id === id);
+                            return sym ? sym.name : '';
+                        }).join(', ');
+
+                        errors.push({
+                            cardA: i + 1,
+                            cardB: j + 1,
+                            count: common.length,
+                            commonNames: commonNames
+                        });
+                    }
+                }
+            }
+
+            // Validation Output
+            if (errors.length > 0) {
+                errors.forEach(err => {
+                    const elA = document.getElementById(`card-element-${err.cardA - 1}`);
+                    const elB = document.getElementById(`card-element-${err.cardB - 1}`);
+                    if (elA) elA.classList.add('border-rose-400');
+                    if (elB) elB.classList.add('border-rose-400');
+                });
+
+                banner.className = 'mt-3 block rounded-xl p-3 bg-rose-50 border border-rose-200 text-rose-950 animate-slide-up';
+                let errHtml = errors.map(e => {
+                    if (e.count === 0) {
+                        return `<li>A <strong>${e.cardA}.</strong> és <strong>${e.cardB}.</strong> kártyák között <strong>nincs közös figura</strong>.</li>`;
+                    } else {
+                        return `<li>A <strong>${e.cardA}.</strong> és <strong>${e.cardB}.</strong> kártyákon <strong>${e.count} közös figura is van</strong> (${e.commonNames}).</li>`;
+                    }
+                }).join('');
+
+                banner.innerHTML = `
+                    <div class="space-y-1">
+                        <div class="font-bold text-xs sm:text-sm text-rose-900 flex items-center gap-1.5">
+                            <span>❌</span> A pakli még nem felel meg a szabályoknak (${errors.length} hiba):
+                        </div>
+                        <ul class="pl-4 list-disc text-xs text-slate-700 space-y-0.5">
+                            ${errHtml}
+                        </ul>
+                    </div>
+                `;
+                revealContainer.classList.add('hidden');
+            } else {
+                // SUCCESS!
+                for (let i = 0; i < 7; i++) {
+                    const el = document.getElementById(`card-element-${i}`);
+                    if (el) el.classList.add('border-emerald-500');
+                }
+
+                banner.className = 'mt-3 block rounded-xl p-3.5 bg-emerald-50 border border-emerald-200 text-emerald-950 animate-slide-up';
+                banner.innerHTML = `
+                    <div class="flex items-start gap-2.5">
+                        <span class="text-xl">🎉</span>
+                        <div>
+                            <h4 class="font-bold text-xs sm:text-sm text-emerald-900">Gratulálok! Sikerült létrehoznod egy saját dobble játékot!</h4>
+                            <p class="text-[11px] sm:text-xs text-emerald-800 mt-0.5">
+                                Bármely két kártyát választod ki, pontosan egyetlen közös figurát találsz rajtuk.
+                            </p>
+                        </div>
+                    </div>
+                `;
+
+                // Show button with EXACT required text: "Lehet egyszerűbben?"
+                revealContainer.classList.remove('hidden');
+
+                // Compute Isomorphism mapping to Fano Plane
+                computeFanoIsomorphism();
+
+                if (typeof confetti === 'function') {
+                    confetti({ particleCount: 75, spread: 50, origin: { y: 0.7 } });
+                }
+            }
+        }
+
+        function hideValidationAlert() {
+            document.getElementById('validation-banner').className = 'mt-3 hidden';
+            document.getElementById('fano-reveal-container').classList.add('hidden');
+        }
+
+
+        // 4. FANO PLANE ISOMORPHISM COMPUTATION
+        function computeFanoIsomorphism() {
+            const S = [...selectedPoolIds];
+            const permutations = getPermutations(S);
+
+            for (let perm of permutations) {
+                let pointMap = {
+                    1: perm[0], 2: perm[1], 3: perm[2],
+                    4: perm[3], 5: perm[4], 6: perm[5], 7: perm[6]
+                };
+
+                let matchedLineToCard = {};
+                let isValidMatch = true;
+
+                for (let lIdx = 0; lIdx < CANONICAL_FANO_LINES.length; lIdx++) {
+                    const linePts = CANONICAL_FANO_LINES[lIdx].points;
+                    const lineSyms = linePts.map(p => pointMap[p]).sort((a,b)=>a-b);
+
+                    const cardIdx = cardsState.findIndex(card => {
+                        const sortedCard = [...card].sort((a,b)=>a-b);
+                        return sortedCard[0] === lineSyms[0] && sortedCard[1] === lineSyms[1] && sortedCard[2] === lineSyms[2];
+                    });
+
+                    if (cardIdx !== -1) {
+                        matchedLineToCard[lIdx] = cardIdx;
+                    } else {
+                        isValidMatch = false;
+                        break;
+                    }
+                }
+
+                if (isValidMatch) {
+                    fanoPointToSymbolMap = pointMap;
+                    fanoLineToCardMap = matchedLineToCard;
+                    break;
+                }
+            }
+        }
+
+        function getPermutations(arr) {
+            if (arr.length <= 1) return [arr];
+            let result = [];
+            for (let i = 0; i < arr.length; i++) {
+                let current = arr[i];
+                let remaining = arr.slice(0, i).concat(arr.slice(i + 1));
+                let remainingPerms = getPermutations(remaining);
+                for (let perm of remainingPerms) {
+                    result.push([current, ...perm]);
+                }
+            }
+            return result;
+        }
+
+
+        // 5. FANO MODAL & CONCRETE CARD DISPLAY
+        function openFanoModal() {
+            const modal = document.getElementById('fano-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+
+            // Populate Vertices (NO numbers, ONLY icons)
+            for (let p = 1; p <= 7; p++) {
+                const symId = fanoPointToSymbolMap[p];
+                const sym = ALL_SYMBOLS.find(s => s.id === symId);
+                const iconDiv = document.getElementById(`fano-node-icon-${p}`);
+                if (iconDiv && sym) {
+                    iconDiv.innerHTML = sym.svg;
+                }
+            }
+
+            resetFanoHighlights();
+            handleFanoLineClick(0);
+        }
+
+        function closeFanoModal() {
+            const modal = document.getElementById('fano-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function handleFanoLineClick(lineIdx) {
+            resetFanoHighlights();
+
+            const line = CANONICAL_FANO_LINES[lineIdx];
+            const cardIdx = fanoLineToCardMap[lineIdx];
+            const lineEl = document.getElementById(`fano-line-${lineIdx}`);
+            if (lineEl) lineEl.classList.add('active-line');
+
+            line.points.forEach(p => {
+                const nodeG = document.getElementById(`fano-node-${p}`);
+                if (nodeG) nodeG.classList.add('active-node');
+            });
+
+            const cardSymbols = cardsState[cardIdx].map(id => ALL_SYMBOLS.find(s => s.id === id));
+            renderConcreteCardInPanel(cardIdx, cardSymbols);
+        }
+
+        function handleFanoNodeClick(nodeId) {
+            resetFanoHighlights();
+
+            const nodeG = document.getElementById(`fano-node-${nodeId}`);
+            if (nodeG) nodeG.classList.add('active-node');
+
+            const symId = fanoPointToSymbolMap[nodeId];
+            const sym = ALL_SYMBOLS.find(s => s.id === symId);
+
+            const passingLines = CANONICAL_FANO_LINES.filter(l => l.points.includes(nodeId));
+            passingLines.forEach(l => {
+                const lineEl = document.getElementById(`fano-line-${l.id}`);
+                if (lineEl) lineEl.classList.add('active-line');
+            });
+
+            const passingCards = passingLines.map(l => fanoLineToCardMap[l.id] + 1);
+
+            const panel = document.getElementById('fano-card-display-panel');
+            panel.innerHTML = `
+                <div class="space-y-1.5 w-full text-center">
+                    <div class="text-xs font-bold text-slate-700">Kiválasztott figura a Fano-síkon:</div>
+                    <div class="w-10 h-10 icon-svg mx-auto p-1 bg-white rounded-full border border-slate-200 shadow-2xs">${sym ? sym.svg : ''}</div>
+                    <div class="text-xs font-bold text-slate-800">${sym ? sym.name : ''}</div>
+                    <p class="text-[11px] text-slate-600 mt-1 leading-relaxed">
+                        Ez a figura a Fano-sík 3 illeszkedő egyenesén, azaz a te <strong>${passingCards.join('., ')}.</strong> kártyáidon szerepel!
+                    </p>
+                </div>
+            `;
+        }
+
+        function renderConcreteCardInPanel(cardIdx, symbols) {
+            const panel = document.getElementById('fano-card-display-panel');
+            panel.innerHTML = `
+                <div class="space-y-1.5 w-full flex flex-col items-center">
+                    <!-- EXACT Required Line Label -->
+                    <span class="text-xs font-bold text-slate-700">Az egyenes által meghatározott kártya:</span>
+                    
+                    <span class="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                        ${cardIdx + 1}. kártya
+                    </span>
+
+                    <!-- CIRCULAR PREVIEW CARD (STRICT EQUILATERAL SLOT LAYOUT) -->
+                    <div class="w-28 h-28 sm:w-32 sm:h-32 rounded-full bg-white border-2 border-slate-300 shadow-xs relative p-1 my-1">
+                        <div class="absolute top-[12%] left-1/2 -translate-x-1/2 w-[34%] h-[34%] p-1 bg-indigo-50/80 rounded-full border border-indigo-200 flex items-center justify-center">
+                            <div class="icon-svg">${symbols[0] ? symbols[0].svg : ''}</div>
+                        </div>
+                        <div class="absolute bottom-[12%] left-[12%] w-[34%] h-[34%] p-1 bg-indigo-50/80 rounded-full border border-indigo-200 flex items-center justify-center">
+                            <div class="icon-svg">${symbols[1] ? symbols[1].svg : ''}</div>
+                        </div>
+                        <div class="absolute bottom-[12%] right-[12%] w-[34%] h-[34%] p-1 bg-indigo-50/80 rounded-full border border-indigo-200 flex items-center justify-center">
+                            <div class="icon-svg">${symbols[2] ? symbols[2].svg : ''}</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function resetFanoHighlights() {
+            CANONICAL_FANO_LINES.forEach(l => {
+                const lineEl = document.getElementById(`fano-line-${l.id}`);
+                if (lineEl) lineEl.classList.remove('active-line');
+            });
+            for (let p = 1; p <= 7; p++) {
+                const nodeG = document.getElementById(`fano-node-${p}`);
+                if (nodeG) nodeG.classList.remove('active-node');
+            }
+        }
+
+
+        // EVENT LISTENERS
+        function setupEventListeners() {
+            document.getElementById('btn-random-pool').onclick = selectRandomPool;
+            document.getElementById('btn-clear-all').onclick = clearAllCards;
+            document.getElementById('btn-validate').onclick = validateDeck;
+            document.getElementById('btn-open-fano').onclick = openFanoModal;
+        }
+    </script>
+</body>
+</html>
