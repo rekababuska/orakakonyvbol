@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>4×4-es Dobble</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #ffffff;
+            color: #0f172a;
+        }
+        .board-slot {
+            cursor: pointer;
+            transition: transform 0.1s ease;
+        }
+        .board-slot-locked {
+            cursor: default;
+        }
+        .board-slot:hover circle.slot-base {
+            stroke: #0284c7 !important;
+            stroke-width: 2.5px !important;
+        }
+        .card-item {
+            transition: all 0.15s ease;
+            user-select: none;
+        }
+        .card-item:hover {
+            transform: translateY(-2px);
+            border-color: #94a3b8;
+        }
+        .card-item.selected {
+            border-color: #0284c7 !important;
+            box-shadow: 0 0 0 3px #0284c7, 0 10px 15px -3px rgba(2, 132, 199, 0.2);
+            background-color: #f0f9ff !important;
+        }
+        aside svg {
+            width: 100%;
+            height: 100%;
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f8fafc;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-2 sm:p-4 md:p-6 bg-slate-50">
+
+    <!-- HEADER -->
+    <header class="max-w-7xl mx-auto w-full mb-3 sm:mb-4">
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pb-3 border-b border-slate-200">
+            <div>
+                <h1 class="text-xl sm:text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-2">
+                    <span>4×4-es Dobble</span>
+                </h1>
+                <p class="text-xs sm:text-sm text-slate-600 mt-1 max-w-3xl leading-relaxed">
+                    Helyezd el a maradék kártyákat a tábla üres karikáira úgy, hogy minden ideális kártya alatt jelzett meredekség mentén végiglépkedve a lapokon – az adott ideális kártyával együtt – mindig ugyanaz a közös szimbólum szerepeljen!
+                </p>
+            </div>
+
+            <!-- Global Status Badges & Action Buttons -->
+            <div class="flex items-center gap-2 shrink-0 flex-wrap justify-center sm:justify-end">
+                <div class="px-3 py-1.5 rounded-xl bg-white border border-slate-200 shadow-xs flex items-center gap-2">
+                    <span class="text-xs text-slate-500 font-medium">Táblán lévő lapok:</span>
+                    <span id="placed-count-badge" class="text-xs sm:text-sm font-bold text-slate-800">0 / 21</span>
+                </div>
+                <div class="px-3 py-1.5 rounded-xl bg-white border border-slate-200 shadow-xs flex items-center gap-2">
+                    <span class="text-xs text-slate-500 font-medium">Helyes egyenesek:</span>
+                    <span id="valid-lines-badge" class="text-xs sm:text-sm font-bold text-sky-600">0 / 21</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Controls Toolbar -->
+        <div class="flex items-center justify-between gap-2 mt-2.5 flex-wrap">
+            <div class="text-xs text-slate-600 font-medium flex items-center gap-1.5">
+                <span>💡</span>
+                <span>Kattints egy betűre a jobb oldali szűrőben a hozzá tartozó 5 kártya megjelenítéséhez!</span>
+            </div>
+
+            <div class="flex items-center gap-1.5 flex-wrap">
+                <button id="btn-new-puzzle" onclick="newRandomPuzzle()" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs transition flex items-center gap-1">
+                    <span>🎲</span><span>Új leosztás</span>
+                </button>
+                <button onclick="giveHint()" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-amber-500 text-white hover:bg-amber-600 shadow-xs transition flex items-center gap-1">
+                    <span>💡</span><span>Tipp (+1 lap)</span>
+                </button>
+                <button onclick="checkSolution()" class="text-xs font-semibold px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs transition flex items-center gap-1">
+                    <span>✓</span><span>Ellenőrzés</span>
+                </button>
+                <button onclick="showSolution()" class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 hover:bg-slate-200 transition">
+                    Megoldás
+                </button>
+                <button onclick="resetBoard()" class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-rose-600 hover:bg-rose-50 transition">
+                    Tábla kiürítése
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MODE WINDOWS (TABS) -->
+    <nav class="max-w-7xl mx-auto w-full mb-3 flex flex-wrap items-center gap-2" aria-label="Feladat ablakok">
+        <button id="tab-basic" onclick="switchMode('basic')" class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition flex items-center gap-2">
+            <span>Alap</span>
+            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">4 kezdőlap</span>
+        </button>
+        <button id="tab-hard" onclick="switchMode('hard')" class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition flex items-center gap-2">
+            <span>Nehezített</span>
+            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">3 kezdőlap</span>
+        </button>
+        <button id="tab-none" onclick="switchMode('none')" class="px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition flex items-center gap-2">
+            <span>Segítség nélkül</span>
+            <span class="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">0 kezdőlap</span>
+        </button>
+    </nav>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="max-w-7xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 flex-grow items-start">
+
+        <!-- LEFT / CENTER: CLEAN PROJECTIVE PLANE BOARD -->
+        <section class="lg:col-span-7 xl:col-span-7 bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-sm flex flex-col items-center">
+            <!-- Immediate Feedback Banner (shown once the user places a card) -->
+            <div id="immediate-feedback-banner" class="hidden w-full mb-2 px-3 py-2 rounded-xl border text-xs font-medium bg-slate-50 border-slate-200 text-slate-700 transition-colors"></div>
+
+            <!-- SVG Board Container: Completely clean white background, ONLY the empty slots and placed cards -->
+            <div class="w-full flex items-center justify-center relative overflow-hidden bg-white rounded-xl p-1">
+                <svg id="plane-svg" viewBox="0 0 620 540" class="w-full max-w-[600px] h-auto select-none" role="img" aria-label="4x4 projective plane">
+                    <defs>
+                        <!-- Card drop shadow -->
+                        <filter id="card-shadow" x="-20%" y="-20%" width="140%" height="140%">
+                            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#0f172a" flood-opacity="0.12"/>
+                        </filter>
+                    </defs>
+
+                    <!-- Slots and Placed Cards (NO background lines or clutter) -->
+                    <g id="layer-slots"></g>
+                </svg>
+            </div>
+
+            <!-- Clean legend -->
+            <div id="board-legend" class="w-full mt-3 p-2 rounded-xl text-[11px] sm:text-xs text-slate-500 flex items-center justify-between gap-2 flex-wrap bg-slate-50 border border-slate-100">
+                <span>⚪ <strong>Üres rácsmezők:</strong> 12 elhelyezendő lap</span>
+                <span>🟣 <strong>Lila keret:</strong> 9 rögzített kezdőlap (5 ideális pont alatta meredekség-lépésekkel + 4 sor/oszlop kezdőlap)</span>
+            </div>
+        </section>
+
+        <!-- RIGHT: LETTER FILTER & FILTERED CARDS -->
+        <aside class="lg:col-span-5 xl:col-span-5 space-y-3 sm:space-y-4">
+
+            <!-- 1. LETTER FILTER CARD -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-sm flex flex-col">
+                <div class="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-slate-100">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                        <h2 class="text-xs sm:text-sm font-bold text-slate-800">
+                            Szűrés betűk szerint (21 betű)
+                        </h2>
+                    </div>
+                    <button onclick="clearFigureFilter()" id="btn-show-all-figures" class="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 transition">
+                        Összes kártya (21)
+                    </button>
+                </div>
+
+                <div class="text-[11px] text-slate-500 mb-2">
+                    Kattints egy betűre: a lista azonnal csak azokat a kártyákat hozza ki, amiken ez a betű rajta van (5 lap)!
+                </div>
+
+                <!-- 21 Letters Grid -->
+                <div id="figures-filter-grid" class="grid grid-cols-4 sm:grid-cols-5 lg:grid-cols-4 gap-1.5 max-h-[190px] overflow-y-auto p-1 border border-slate-100 rounded-xl bg-slate-50/50">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+
+            <!-- 2. CARDS LIST CARD -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-sm flex flex-col">
+                <div class="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-slate-100">
+                    <div class="flex items-center gap-2 min-w-0">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0"></span>
+                        <h2 id="cards-list-title" class="text-xs sm:text-sm font-bold text-slate-800 truncate">
+                            Összes kártya (21 db)
+                        </h2>
+                    </div>
+                    <span id="cards-list-subtitle" class="text-[11px] font-semibold text-slate-500 shrink-0">
+                        Kattints a lerakáshoz!
+                    </span>
+                </div>
+
+                <!-- Filter indicator alert if active -->
+                <div id="active-filter-indicator" class="hidden mb-2 px-2.5 py-1.5 rounded-lg bg-sky-50 border border-sky-200 text-sky-800 text-xs flex items-center justify-between">
+                    <span id="active-filter-text" class="font-bold"></span>
+                    <button onclick="clearFigureFilter()" class="text-sky-600 hover:underline text-[11px]">Szűrés feloldása</button>
+                </div>
+
+                <!-- Cards Container -->
+                <div id="filtered-cards-container" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2.5 p-1 max-h-[380px] overflow-y-auto">
+                    <!-- Populated via JS -->
+                </div>
+
+                <div id="filtered-cards-empty" class="hidden py-8 text-center text-slate-400 text-xs italic">
+                    Nincs találat a kiválasztott szűrésre.
+                </div>
+            </div>
+
+        </aside>
+
+    </main>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // =====================================================================
+        // 1. MATHEMATICAL DEFINITION OF PG(2,4)
+        // =====================================================================
+        // 21 Lines (subsets of 5 points from 0..20)
+        // 0..15: 4x4 affine grid slots (row r, col c -> r*4 + c)
+        // 16..20: 5 ideal slots (16: P_H, 17: P_V, 18: P_1, 19: P_2, 20: P_3)
+        const PG24_LINES = [
+            // 4 Horizontal rows + P_H (16)
+            [0, 1, 2, 3, 16],
+            [4, 5, 6, 7, 16],
+            [8, 9, 10, 11, 16],
+            [12, 13, 14, 15, 16],
+            // 4 Vertical columns + P_V (17)
+            [0, 4, 8, 12, 17],
+            [1, 5, 9, 13, 17],
+            [2, 6, 10, 14, 17],
+            [3, 7, 11, 15, 17],
+            // 4 Slope 1 parallel lines + P_1 (18)
+            [0, 5, 10, 15, 18],
+            [4, 1, 14, 11, 18],
+            [8, 13, 2, 7, 18],
+            [12, 9, 6, 3, 18],
+            // 4 Slope 2 parallel lines + P_2 (19)
+            [0, 9, 14, 7, 19],
+            [4, 13, 10, 3, 19],
+            [8, 1, 6, 15, 19],
+            [12, 5, 2, 11, 19],
+            // 4 Slope 3 parallel lines + P_3 (20)
+            [0, 13, 6, 11, 20],
+            [4, 9, 2, 15, 20],
+            [8, 5, 14, 3, 20],
+            [12, 1, 10, 7, 20],
+            // Line at infinity (5 ideal points)
+            [16, 17, 18, 19, 20]
+        ];
+
+        // 21 Cards (card p has 5 figures corresponding to lines passing through point p)
+        const PG24_CARDS = [
+            [0, 4, 8, 12, 16],
+            [0, 5, 9, 14, 19],
+            [0, 6, 10, 15, 17],
+            [0, 7, 11, 13, 18],
+            [1, 4, 9, 13, 17],
+            [1, 5, 8, 15, 18],
+            [1, 6, 11, 14, 16],
+            [1, 7, 10, 12, 19],
+            [2, 4, 10, 14, 18],
+            [2, 5, 11, 12, 17],
+            [2, 6, 8, 13, 19],
+            [2, 7, 9, 15, 16],
+            [3, 4, 11, 15, 19],
+            [3, 5, 10, 13, 16],
+            [3, 6, 9, 12, 18],
+            [3, 7, 8, 14, 17],
+            [0, 1, 2, 3, 20],
+            [4, 5, 6, 7, 20],
+            [8, 9, 10, 11, 20],
+            [12, 13, 14, 15, 20],
+            [16, 17, 18, 19, 20]
+        ];
+
+        // 21 ABC Letters (A..U) with high-contrast colors
+        const LETTERS = 'ABCDEFGHIJKLMNOPQRSTU'.split('');
+        const LETTER_COLORS = [
+            '#d97706', '#7c3aed', '#ca8a04', '#dc2626', '#059669',
+            '#e11d48', '#0284c7', '#0369a1', '#b45309', '#9333ea',
+            '#be123c', '#db2777', '#65a30d', '#4f46e5', '#ea580c',
+            '#0d9488', '#0f172a', '#c2410c', '#0891b2', '#2563eb',
+            '#6b21a8'
+        ];
+        const FIGURES = LETTERS.map((letter, idx) => {
+            const color = LETTER_COLORS[idx];
+            return {
+                id: idx,
+                name: letter,
+                color,
+                svg: `<svg width="24" height="24" viewBox="0 0 24 24"><text x="12" y="18.5" text-anchor="middle" font-size="19" font-weight="800" font-family="Inter, system-ui, sans-serif" fill="${color}">${letter}</text></svg>`
+            };
+        });
+
+        // 21 Board Slot Locations (4x4 Grid in center + 5 Ideal Points outside)
+        const BOARD_SLOTS = [
+            // 4x4 Affine Grid (0..15)
+            { id: 0,  kind: 'grid', row: 0, col: 0, x: 180, y: 170 },
+            { id: 1,  kind: 'grid', row: 0, col: 1, x: 260, y: 170 },
+            { id: 2,  kind: 'grid', row: 0, col: 2, x: 340, y: 170 },
+            { id: 3,  kind: 'grid', row: 0, col: 3, x: 420, y: 170 },
+
+            { id: 4,  kind: 'grid', row: 1, col: 0, x: 180, y: 250 },
+            { id: 5,  kind: 'grid', row: 1, col: 1, x: 260, y: 250 },
+            { id: 6,  kind: 'grid', row: 1, col: 2, x: 340, y: 250 },
+            { id: 7,  kind: 'grid', row: 1, col: 3, x: 420, y: 250 },
+
+            { id: 8,  kind: 'grid', row: 2, col: 0, x: 180, y: 330 },
+            { id: 9,  kind: 'grid', row: 2, col: 1, x: 260, y: 330 },
+            { id: 10, kind: 'grid', row: 2, col: 2, x: 340, y: 330 },
+            { id: 11, kind: 'grid', row: 2, col: 3, x: 420, y: 330 },
+
+            { id: 12, kind: 'grid', row: 3, col: 0, x: 180, y: 410 },
+            { id: 13, kind: 'grid', row: 3, col: 1, x: 260, y: 410 },
+            { id: 14, kind: 'grid', row: 3, col: 2, x: 340, y: 410 },
+            { id: 15, kind: 'grid', row: 3, col: 3, x: 420, y: 410 },
+
+            // 5 Ideal Points (16..20)
+            { id: 16, kind: 'ideal', name: 'Ideális pont (Sorok)',    x: 525, y: 290 },
+            { id: 17, kind: 'ideal', name: 'Ideális pont (Oszlopok)', x: 300, y: 58 },
+            { id: 18, kind: 'ideal', name: 'Ideális pont (Átló 1)',   x: 80,  y: 75 },
+            { id: 19, kind: 'ideal', name: 'Ideális pont (Átló 2)',   x: 520, y: 75 },
+            { id: 20, kind: 'ideal', name: 'Ideális pont (Átló 3)',   x: 75,  y: 290 }
+        ];
+
+        // 5 figure offsets inside circular card of radius 32
+        const PENTAGON_OFFSETS = [
+            { dx: 0, dy: -16 },
+            { dx: 15.2, dy: -4.9 },
+            { dx: 9.4, dy: 13.0 },
+            { dx: -9.4, dy: 13.0 },
+            { dx: -15.2, dy: -4.9 }
+        ];
+
+        // =====================================================================
+        // 2. VALID BOARD AUTOMORPHISMS & APPLICATION STATE
+        // =====================================================================
+        const F4_MUL = [
+            [0, 0, 0, 0],
+            [0, 1, 2, 3],
+            [0, 2, 3, 1],
+            [0, 3, 1, 2]
+        ];
+
+        // All 48 valid grid arrangements preserving PG24_LINES and the 5 locked ideal cards (16..20)
+        const VALID_BOARDS = (() => {
+            const boards = [];
+            for (let s = 1; s <= 3; s++) {
+                for (let dr = 0; dr < 4; dr++) {
+                    for (let dc = 0; dc < 4; dc++) {
+                        const b = new Array(21);
+                        for (let p = 0; p < 16; p++) {
+                            const r = Math.floor(p / 4);
+                            const c = p % 4;
+                            const nr = F4_MUL[s][r] ^ dr;
+                            const nc = F4_MUL[s][c] ^ dc;
+                            b[4 * nr + nc] = p;
+                        }
+                        for (let i = 16; i < 21; i++) b[i] = i;
+                        boards.push(b);
+                    }
+                }
+            }
+            return boards;
+        })();
+
+        // Dynamic locked anchors: 5 ideal points (16..20) + 4 / 3 / 0 grid starter cards by mode
+        let currentMode = 'basic'; // 'basic' | 'hard' | 'none'
+        const modeStates = { basic: null, hard: null, none: null };
+        let lockedSlots = new Set([16, 17, 18, 19, 20]);
+        let lockedCards = new Set([16, 17, 18, 19, 20]);
+        let currentSeedBoard = VALID_BOARDS[0];
+
+        function isSlotLocked(slotId) {
+            return lockedSlots.has(slotId);
+        }
+        function isCardLocked(cardId) {
+            return lockedCards.has(cardId);
+        }
+
+        // boardState[slotId] = cardId | null
+        let boardState = new Array(21).fill(null);
+        let selectedCardId = null;
+        let activeFigureFilter = null; // null or figureId (0..20)
+        let lastPlacedSlotId = null;
+
+        // =====================================================================
+        // 3. INITIALIZATION & MODE WINDOWS
+        // =====================================================================
+        window.addEventListener('DOMContentLoaded', () => {
+            generateRandomPuzzle('basic');
+            resetBoardState();
+            updateAll();
+        });
+
+        function shuffleArray(arr) {
+            const copy = [...arr];
+            for (let i = copy.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [copy[i], copy[j]] = [copy[j], copy[i]];
+            }
+            return copy;
+        }
+
+        function generateRandomPuzzle(mode = currentMode) {
+            const randomBoardIdx = Math.floor(Math.random() * VALID_BOARDS.length);
+            currentSeedBoard = VALID_BOARDS[randomBoardIdx];
+
+            const rows = shuffleArray([0, 1, 2, 3]);
+            const cols = shuffleArray([0, 1, 2, 3]);
+            const starterCount = mode === 'basic' ? 4 : (mode === 'hard' ? 3 : 0);
+
+            const gridAnchors = [];
+            for (let i = 0; i < starterCount; i++) {
+                gridAnchors.push(rows[i] * 4 + cols[i]);
+            }
+
+            lockedSlots = new Set([...gridAnchors, 16, 17, 18, 19, 20]);
+            lockedCards = new Set(Array.from(lockedSlots).map(s => currentSeedBoard[s]));
+        }
+
+        function resetBoardState() {
+            boardState.fill(null);
+            // Pre-fill all locked starter slots (5 ideal points + mode-dependent grid starters)
+            lockedSlots.forEach(s => {
+                boardState[s] = currentSeedBoard[s];
+            });
+            selectedCardId = null;
+            activeFigureFilter = null;
+            lastPlacedSlotId = null;
+        }
+
+        function switchMode(newMode) {
+            if (newMode === currentMode) return;
+            modeStates[currentMode] = {
+                boardState: [...boardState],
+                lockedSlots: new Set(lockedSlots),
+                lockedCards: new Set(lockedCards),
+                currentSeedBoard: [...currentSeedBoard],
+                selectedCardId,
+                activeFigureFilter,
+                lastPlacedSlotId
+            };
+
+            currentMode = newMode;
+            const saved = modeStates[newMode];
+            if (saved) {
+                boardState = [...saved.boardState];
+                lockedSlots = new Set(saved.lockedSlots);
+                lockedCards = new Set(saved.lockedCards);
+                currentSeedBoard = [...saved.currentSeedBoard];
+                selectedCardId = saved.selectedCardId;
+                activeFigureFilter = saved.activeFigureFilter;
+                lastPlacedSlotId = saved.lastPlacedSlotId;
+            } else {
+                generateRandomPuzzle(newMode);
+                resetBoardState();
+            }
+            updateAll();
+        }
+
+        function newRandomPuzzle() {
+            generateRandomPuzzle(currentMode);
+            resetBoardState();
+            updateAll();
+        }
+
+        function updateModeUI() {
+            const tabs = ['basic', 'hard', 'none'];
+            tabs.forEach(m => {
+                const btn = document.getElementById(`tab-${m}`);
+                if (!btn) return;
+                const badge = btn.querySelector('span:last-child');
+                if (m === currentMode) {
+                    btn.className = 'px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition flex items-center gap-2 bg-sky-600 text-white border-sky-600 shadow-xs';
+                    if (badge) badge.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-sky-500/40 text-white border border-sky-300/40';
+                } else {
+                    btn.className = 'px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold border transition flex items-center gap-2 bg-white text-slate-700 border-slate-200 hover:bg-slate-100';
+                    if (badge) badge.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200';
+                }
+            });
+
+            const newBtn = document.getElementById('btn-new-puzzle');
+            if (newBtn) {
+                newBtn.classList.toggle('hidden', currentMode === 'none');
+            }
+
+            const legendEl = document.getElementById('board-legend');
+            if (legendEl) {
+                if (currentMode === 'basic') {
+                    legendEl.innerHTML = '<span>⚪ <strong>Üres rácsmezők:</strong> 12 elhelyezendő lap</span><span>🟣 <strong>Lila keret:</strong> 9 rögzített kezdőlap (5 ideális pont meredekség-lépésekkel + 4 sor/oszlop kezdőlap)</span>';
+                } else if (currentMode === 'hard') {
+                    legendEl.innerHTML = '<span>⚪ <strong>Üres rácsmezők:</strong> 13 elhelyezendő lap</span><span>🟣 <strong>Lila keret:</strong> 8 rögzített kezdőlap (5 ideális pont meredekség-lépésekkel + 3 kezdőlap a rácson)</span>';
+                } else {
+                    legendEl.innerHTML = '<span>⚪ <strong>Üres rácsmezők:</strong> 16 elhelyezendő lap</span><span>🟣 <strong>Lila keret:</strong> 5 rögzített ideális pont (nincs kezdőlap a rácson)</span>';
+                }
+            }
+        }
+
+        function updateAll() {
+            const feedback = evaluateBoardFeedback();
+            updateModeUI();
+            renderBoardSlots(feedback);
+            renderFigureFilterGrid(feedback);
+            renderFilteredCards(feedback);
+            updateStatsBadges(feedback);
+        }
+
+        // =====================================================================
+        // 4. RENDERING FUNCTIONS (CLEAN, NO WEIRD BACKGROUND LINES)
+        // =====================================================================
+        function renderBoardSlots(feedback = evaluateBoardFeedback()) {
+            const container = document.getElementById('layer-slots');
+            container.innerHTML = '';
+
+            BOARD_SLOTS.forEach(slot => {
+                const cardId = boardState[slot.id];
+                const locked = isSlotLocked(slot.id);
+                const isConflict = feedback.conflictSlots.has(slot.id);
+                const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                group.setAttribute('class', locked ? 'board-slot-locked' : 'board-slot');
+                group.setAttribute('id', `slot-${slot.id}`);
+
+                if (!locked) {
+                    group.onclick = () => handleSlotClick(slot.id);
+
+                    // HTML5 Drag & Drop onto unlocked slot
+                    group.ondragover = (e) => {
+                        e.preventDefault();
+                    };
+                    group.ondrop = (e) => {
+                        e.preventDefault();
+                        const droppedCardId = parseInt(e.dataTransfer.getData('text/plain'), 10);
+                        if (!isNaN(droppedCardId)) {
+                            placeCardInSlot(droppedCardId, slot.id);
+                        }
+                    };
+                }
+
+                const isIdeal = slot.kind === 'ideal';
+                const hasCard = cardId !== null;
+                const radius = 32;
+
+                // Generous invisible hitbox for smooth clicking
+                const hitbox = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                hitbox.setAttribute('cx', slot.x);
+                hitbox.setAttribute('cy', slot.y);
+                hitbox.setAttribute('r', '40');
+                hitbox.setAttribute('fill', 'transparent');
+                group.appendChild(hitbox);
+
+                // Slot Circle
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', slot.x);
+                circle.setAttribute('cy', slot.y);
+                circle.setAttribute('r', radius);
+                circle.setAttribute('class', 'slot-base');
+
+                if (hasCard) {
+                    if (locked) {
+                        circle.setAttribute('fill', '#ffffff');
+                        circle.setAttribute('stroke', '#818cf8');
+                        circle.setAttribute('stroke-width', '2.5');
+                    } else if (isConflict) {
+                        circle.setAttribute('fill', '#fef2f2');
+                        circle.setAttribute('stroke', '#ef4444');
+                        circle.setAttribute('stroke-width', '3');
+                    } else {
+                        circle.setAttribute('fill', '#ffffff');
+                        circle.setAttribute('stroke', '#10b981');
+                        circle.setAttribute('stroke-width', '2.5');
+                    }
+                    circle.setAttribute('filter', 'url(#card-shadow)');
+                } else {
+                    circle.setAttribute('fill', isIdeal ? '#f5f3ff' : '#f8fafc');
+                    circle.setAttribute('stroke', isIdeal ? '#a5b4fc' : '#cbd5e1');
+                    circle.setAttribute('stroke-width', isIdeal ? '2' : '1.5');
+                    circle.setAttribute('stroke-dasharray', '4 3');
+                }
+                group.appendChild(circle);
+
+                // If card is placed: render its 5 letters cleanly
+                if (hasCard) {
+                    const cardFigures = PG24_CARDS[cardId];
+                    cardFigures.forEach((figId, idx) => {
+                        const fig = FIGURES[figId];
+                        const offset = PENTAGON_OFFSETS[idx];
+                        const iconX = slot.x + offset.dx - 7.5;
+                        const iconY = slot.y + offset.dy - 7.5;
+
+                        const iconGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                        iconGroup.setAttribute('transform', `translate(${iconX}, ${iconY}) scale(0.625)`);
+                        iconGroup.style.pointerEvents = 'none';
+                        iconGroup.innerHTML = fig.svg;
+                        group.appendChild(iconGroup);
+                    });
+
+                    // Immediate status badge dot (✓ or !) on user-placed cards
+                    if (!locked) {
+                        const badgeCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                        badgeCircle.setAttribute('cx', slot.x + 23);
+                        badgeCircle.setAttribute('cy', slot.y - 23);
+                        badgeCircle.setAttribute('r', '8.5');
+                        badgeCircle.setAttribute('fill', isConflict ? '#ef4444' : '#10b981');
+                        badgeCircle.setAttribute('stroke', '#ffffff');
+                        badgeCircle.setAttribute('stroke-width', '1.5');
+                        badgeCircle.style.pointerEvents = 'none';
+                        group.appendChild(badgeCircle);
+
+                        const badgeText = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                        badgeText.setAttribute('x', slot.x + 23);
+                        badgeText.setAttribute('y', slot.y - 19.5);
+                        badgeText.setAttribute('text-anchor', 'middle');
+                        badgeText.setAttribute('fill', '#ffffff');
+                        badgeText.setAttribute('font-size', '11');
+                        badgeText.setAttribute('font-weight', '800');
+                        badgeText.style.pointerEvents = 'none';
+                        badgeText.textContent = isConflict ? '!' : '✓';
+                        group.appendChild(badgeText);
+                    }
+                }
+
+                // Below each ideal card: mark the line slope as horizontal/vertical step dashes
+                if (isIdeal) {
+                    renderSlopeStepMark(group, slot);
+                }
+
+                container.appendChild(group);
+            });
+        }
+
+        function renderSlopeStepMark(group, slot) {
+            const SVG_NS = 'http://www.w3.org/2000/svg';
+            // 16: Horizontal (1 right dash)
+            // 17: Vertical   (1 vertical dash)
+            // 18: Slope 1    (1 horizontal dash + 1 vertical dash)
+            // 19: Slope 2    (1 horizontal dash + 2 vertical dashes)
+            // 20: Slope 3    (1 horizontal dash + 3 vertical dashes)
+            const configs = {
+                16: { horiz: 1, vert: 0, w: 30, h: 20, offsetY: 48, title: 'Vízszintes egyenesek (1 lépés jobbra)' },
+                17: { horiz: 0, vert: 1, w: 22, h: 24, offsetY: 50, title: 'Függőleges egyenesek (1 lépés fel)' },
+                18: { horiz: 1, vert: 1, w: 30, h: 24, offsetY: 50, title: 'Meredekség: 1 (1 vízszintes, 1 függőleges lépés)' },
+                19: { horiz: 1, vert: 2, w: 30, h: 32, offsetY: 54, title: 'Meredekség: 2 (1 vízszintes, 2 függőleges lépés)' },
+                20: { horiz: 1, vert: 3, w: 30, h: 40, offsetY: 58, title: 'Meredekség: 3 (1 vízszintes, 3 függőleges lépés)' }
+            };
+            const cfg = configs[slot.id];
+            if (!cfg) return;
+
+            const bx = slot.x;
+            const by = slot.y + cfg.offsetY;
+
+            const stepGroup = document.createElementNS(SVG_NS, 'g');
+            stepGroup.style.pointerEvents = 'none';
+
+            const titleEl = document.createElementNS(SVG_NS, 'title');
+            titleEl.textContent = cfg.title;
+            stepGroup.appendChild(titleEl);
+
+            const rect = document.createElementNS(SVG_NS, 'rect');
+            rect.setAttribute('x', bx - cfg.w / 2);
+            rect.setAttribute('y', by - cfg.h / 2);
+            rect.setAttribute('width', cfg.w);
+            rect.setAttribute('height', cfg.h);
+            rect.setAttribute('rx', '6');
+            rect.setAttribute('fill', '#eef2ff');
+            rect.setAttribute('stroke', '#c7d2fe');
+            rect.setAttribute('stroke-width', '1.2');
+            stepGroup.appendChild(rect);
+
+            const addDash = (x1, y1, x2, y2) => {
+                const ln = document.createElementNS(SVG_NS, 'line');
+                ln.setAttribute('x1', x1);
+                ln.setAttribute('y1', y1);
+                ln.setAttribute('x2', x2);
+                ln.setAttribute('y2', y2);
+                ln.setAttribute('stroke', '#3730a3');
+                ln.setAttribute('stroke-width', '2.5');
+                ln.setAttribute('stroke-linecap', 'round');
+                stepGroup.appendChild(ln);
+            };
+
+            if (cfg.horiz === 1 && cfg.vert === 0) {
+                // Single horizontal dash
+                addDash(bx - 6, by, bx + 6, by);
+            } else if (cfg.horiz === 0 && cfg.vert === 1) {
+                // Single vertical dash
+                addDash(bx, by + 5, bx, by - 5);
+            } else {
+                // 1 horizontal dash followed by N separated vertical dashes going upward
+                const dashLen = 6;
+                const gap = 3;
+                const step = dashLen + gap;
+                const totalVertSpan = cfg.vert * dashLen + (cfg.vert - 1) * gap;
+                const baseY = by + totalVertSpan / 2;
+                const cornerX = bx + 2;
+
+                // Horizontal dash to the left of the vertical stack
+                addDash(cornerX - 10, baseY, cornerX - 2, baseY);
+
+                // Vertical dashes going up
+                for (let k = 0; k < cfg.vert; k++) {
+                    const yBottom = baseY - 2 - k * step;
+                    const yTop = yBottom - dashLen;
+                    addDash(cornerX + 3, yBottom, cornerX + 3, yTop);
+                }
+            }
+
+            group.appendChild(stepGroup);
+        }
+
+        function renderFigureFilterGrid(feedback = evaluateBoardFeedback()) {
+            const container = document.getElementById('figures-filter-grid');
+            container.innerHTML = '';
+
+            const allBtn = document.getElementById('btn-show-all-figures');
+            if (activeFigureFilter === null) {
+                allBtn.className = 'text-[11px] font-bold px-2 py-0.5 rounded-md bg-sky-100 text-sky-800 border border-sky-300 shadow-xs transition';
+            } else {
+                allBtn.className = 'text-[11px] font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 transition';
+            }
+
+            FIGURES.forEach(fig => {
+                const btn = document.createElement('button');
+                const isSelected = activeFigureFilter === fig.id;
+
+                // Count placed cards with this figure
+                let placedCount = 0;
+                for (let s = 0; s < 21; s++) {
+                    const c = boardState[s];
+                    if (c !== null && PG24_CARDS[c].includes(fig.id)) {
+                        placedCount++;
+                    }
+                }
+
+                const isValidLine = isFigureFormingValidLine(fig.id);
+                const hasFigConflict = feedback.figureHasConflict.has(fig.id);
+                let badgeCls = 'bg-slate-100 text-slate-600 border-slate-200';
+                let badgeText = `${placedCount}/5`;
+                if (hasFigConflict) {
+                    badgeCls = 'bg-rose-100 text-rose-800 border-rose-300 font-bold';
+                    badgeText = '!';
+                } else if (placedCount === 5 && isValidLine) {
+                    badgeCls = 'bg-emerald-100 text-emerald-800 border-emerald-300 font-bold';
+                    badgeText = '✓';
+                } else if (placedCount > 0) {
+                    badgeCls = 'bg-amber-100 text-amber-800 border-amber-300';
+                }
+
+                btn.className = `p-1.5 rounded-lg border flex items-center justify-between gap-1 text-xs transition ${
+                    isSelected
+                        ? 'ring-2 ring-sky-500 bg-sky-100 border-sky-400 font-bold'
+                        : (hasFigConflict ? 'bg-rose-50/70 border-rose-300 hover:bg-rose-100 text-rose-900' : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-700')
+                }`;
+                btn.onclick = () => setFigureFilter(fig.id);
+
+                btn.innerHTML = `
+                    <div class="flex items-center justify-center">
+                        <span class="w-5 h-5 shrink-0">${fig.svg}</span>
+                    </div>
+                    <span class="text-[10px] px-1 py-0.2 rounded-md border ${badgeCls} shrink-0">
+                        ${badgeText}
+                    </span>
+                `;
+
+                container.appendChild(btn);
+            });
+        }
+
+        function renderFilteredCards(feedback = evaluateBoardFeedback()) {
+            const container = document.getElementById('filtered-cards-container');
+            const titleEl = document.getElementById('cards-list-title');
+            const subEl = document.getElementById('cards-list-subtitle');
+            const emptyHint = document.getElementById('filtered-cards-empty');
+            const filterIndicator = document.getElementById('active-filter-indicator');
+            const filterText = document.getElementById('active-filter-text');
+
+            container.innerHTML = '';
+
+            // Filter cards: if a figure is selected, show ONLY the cards that contain that figure
+            let visibleCardIds = [];
+            if (activeFigureFilter !== null) {
+                const fig = FIGURES[activeFigureFilter];
+                for (let c = 0; c < 21; c++) {
+                    if (PG24_CARDS[c].includes(fig.id)) {
+                        visibleCardIds.push(c);
+                    }
+                }
+                titleEl.textContent = `${fig.name} betű kártyái (5 db)`;
+                subEl.textContent = `Csak a(z) ${fig.name} betűs kártyák!`;
+
+                filterIndicator.classList.remove('hidden');
+                filterText.innerHTML = `<span>Szűrés:</span> <span class="inline-flex items-center gap-1 ml-1 text-sky-900 font-bold"><span class="w-4 h-4 inline-block">${fig.svg}</span> ${fig.name}</span>`;
+            } else {
+                for (let c = 0; c < 21; c++) {
+                    visibleCardIds.push(c);
+                }
+                titleEl.textContent = `Összes kártya (21 db)`;
+                subEl.textContent = `Kattints egy lapra a lerakáshoz!`;
+                filterIndicator.classList.add('hidden');
+            }
+
+            emptyHint.classList.toggle('hidden', visibleCardIds.length > 0);
+
+            visibleCardIds.forEach(cardId => {
+                const cardDiv = document.createElement('div');
+                const isLocked = isCardLocked(cardId);
+                cardDiv.setAttribute('draggable', isLocked ? 'false' : 'true');
+                cardDiv.setAttribute('id', `deck-card-${cardId}`);
+
+                // Check where card is currently placed
+                const slotIndex = boardState.indexOf(cardId);
+                const isPlaced = slotIndex !== -1;
+                const isSelected = !isLocked && selectedCardId === cardId;
+
+                const cardFigures = PG24_CARDS[cardId];
+
+                cardDiv.className = `card-item p-2 rounded-2xl border transition flex flex-col items-center justify-between gap-1.5 ${
+                    isLocked ? 'bg-indigo-50/50 border-indigo-200 opacity-85' : (isPlaced ? 'bg-slate-50 border-slate-200 opacity-75' : 'bg-white border-slate-200 shadow-xs')
+                } ${isSelected ? 'selected' : ''}`;
+
+                // Card Circle
+                const circleDiv = document.createElement('div');
+                circleDiv.className = `w-20 h-20 rounded-full bg-white border ${isLocked ? 'border-indigo-200 cursor-default' : 'border-slate-200 cursor-grab active:cursor-grabbing'} shadow-xs flex items-center justify-center relative mx-auto`;
+
+                if (isLocked) {
+                    circleDiv.ondragstart = (e) => e.preventDefault();
+                } else {
+                    circleDiv.onclick = () => selectCard(cardId);
+                    circleDiv.ondragstart = (e) => {
+                        e.dataTransfer.setData('text/plain', cardId.toString());
+                        selectCard(cardId);
+                    };
+                }
+
+                // Render 5 figures in pentagon inside HTML card
+                cardFigures.forEach((figId, idx) => {
+                    const fig = FIGURES[figId];
+                    const offset = PENTAGON_OFFSETS[idx];
+                    const iconWrap = document.createElement('div');
+                    iconWrap.className = 'absolute w-4 h-4 flex items-center justify-center pointer-events-none';
+                    iconWrap.style.left = `calc(50% + ${offset.dx * 0.85}px - 8px)`;
+                    iconWrap.style.top = `calc(50% + ${offset.dy * 0.85}px - 8px)`;
+                    iconWrap.innerHTML = fig.svg;
+
+                    if (activeFigureFilter === figId) {
+                        iconWrap.style.transform = 'scale(1.3)';
+                        iconWrap.style.filter = 'drop-shadow(0 0 3px #0284c7)';
+                    }
+
+                    circleDiv.appendChild(iconWrap);
+                });
+
+                cardDiv.appendChild(circleDiv);
+
+                // Status info & action button
+                const statusDiv = document.createElement('div');
+                statusDiv.className = 'w-full flex items-center justify-between gap-1 text-[11px] pt-1 border-t border-slate-100';
+
+                if (isLocked) {
+                    statusDiv.innerHTML = `
+                        <span class="text-indigo-700 font-bold truncate">Rögzítve</span>
+                        <span class="text-indigo-500 font-semibold px-1" title="Ez a kártya nem mozgatható">🔒</span>
+                    `;
+                } else if (isPlaced) {
+                    const isCardConflict = feedback.conflictSlots.has(slotIndex);
+                    statusDiv.innerHTML = `
+                        <span class="${isCardConflict ? 'text-rose-600' : 'text-emerald-700'} font-bold truncate">${isCardConflict ? 'Ütközés (!)' : 'Helyén ✓'}</span>
+                        <button onclick="returnCardToTray(${slotIndex})" class="text-slate-400 hover:text-rose-600 font-semibold px-1 rounded transition">Vissza</button>
+                    `;
+                } else {
+                    statusDiv.innerHTML = `
+                        <span class="text-slate-500 font-medium">Pakliban</span>
+                        <button onclick="selectCard(${cardId})" class="text-sky-600 hover:text-sky-800 font-bold px-1 rounded transition">${isSelected ? 'Kijelölve' : 'Lerakás'}</button>
+                    `;
+                }
+
+                cardDiv.appendChild(statusDiv);
+                container.appendChild(cardDiv);
+            });
+        }
+
+        function updateStatsBadges(feedback = evaluateBoardFeedback()) {
+            let placed = 0;
+            for (let i = 0; i < 21; i++) {
+                if (boardState[i] !== null) placed++;
+            }
+            document.getElementById('placed-count-badge').textContent = `${placed} / 21`;
+
+            let validCount = 0;
+            for (let f = 0; f < 21; f++) {
+                if (isFigureFormingValidLine(f)) validCount++;
+            }
+            document.getElementById('valid-lines-badge').textContent = `${validCount} / 21`;
+
+            const bannerEl = document.getElementById('immediate-feedback-banner');
+            if (bannerEl) {
+                if (feedback.status === 'empty') {
+                    bannerEl.className = 'hidden';
+                    bannerEl.textContent = '';
+                } else {
+                    bannerEl.textContent = feedback.message;
+                    if (feedback.status === 'conflict') {
+                        bannerEl.className = 'w-full mb-2 px-3 py-2 rounded-xl border text-xs font-semibold bg-rose-50 border-rose-300 text-rose-800 transition-colors';
+                    } else {
+                        bannerEl.className = 'w-full mb-2 px-3 py-2 rounded-xl border text-xs font-semibold bg-emerald-50 border-emerald-300 text-emerald-800 transition-colors';
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // 5. GEOMETRIC VERIFICATION & IMMEDIATE FEEDBACK
+        // =====================================================================
+        function getViableLinesForFigure(figureId) {
+            const slotsWithFig = [];
+            for (let s = 0; s < 21; s++) {
+                const c = boardState[s];
+                if (c !== null && PG24_CARDS[c].includes(figureId)) {
+                    slotsWithFig.push(s);
+                }
+            }
+            return PG24_LINES.filter(line => {
+                if (!slotsWithFig.every(s => line.includes(s))) return false;
+                return line.every(s => boardState[s] === null || PG24_CARDS[boardState[s]].includes(figureId));
+            });
+        }
+
+        function explainSlotConflict(slotId, figureHasConflict) {
+            const cardId = boardState[slotId];
+            if (cardId === null) return '❌ Ütközés a táblán.';
+            const r = Math.floor(slotId / 4);
+            const c = slotId % 4;
+            const figs = PG24_CARDS[cardId];
+            const rowFig = figs.find(f => f <= 3);
+            const colFig = figs.find(f => f >= 4 && f <= 7);
+
+            // 1. Check horizontal row consistency
+            for (let colIdx = 0; colIdx < 4; colIdx++) {
+                const peerSlot = 4 * r + colIdx;
+                if (peerSlot !== slotId && boardState[peerSlot] !== null) {
+                    const peerRowFig = PG24_CARDS[boardState[peerSlot]].find(f => f <= 3);
+                    if (peerRowFig !== rowFig) {
+                        return `❌ Ütközés a(z) ${r + 1}. sorban: ezen a lapon ${FIGURES[rowFig].name} van, de a sor másik lapján ${FIGURES[peerRowFig].name} szerepel.`;
+                    }
+                }
+            }
+
+            // 2. Check vertical column consistency
+            for (let rowIdx = 0; rowIdx < 4; rowIdx++) {
+                const peerSlot = 4 * rowIdx + c;
+                if (peerSlot !== slotId && boardState[peerSlot] !== null) {
+                    const peerColFig = PG24_CARDS[boardState[peerSlot]].find(f => f >= 4 && f <= 7);
+                    if (peerColFig !== colFig) {
+                        return `❌ Ütközés a(z) ${c + 1}. oszlopban: ezen a lapon ${FIGURES[colFig].name} van, de az oszlop másik lapján ${FIGURES[peerColFig].name} szerepel.`;
+                    }
+                }
+            }
+
+            // 3. Check duplicate row/col figure used in a different row/col
+            for (let s = 0; s < 16; s++) {
+                if (s === slotId || boardState[s] === null) continue;
+                const peerFigs = PG24_CARDS[boardState[s]];
+                if (Math.floor(s / 4) !== r && peerFigs.includes(rowFig)) {
+                    return `❌ A(z) ${FIGURES[rowFig].name} betű már a(z) ${Math.floor(s / 4) + 1}. sorban szerepel.`;
+                }
+                if ((s % 4) !== c && peerFigs.includes(colFig)) {
+                    return `❌ A(z) ${FIGURES[colFig].name} betű már a(z) ${(s % 4) + 1}. oszlopban szerepel.`;
+                }
+            }
+
+            // 4. Check diagonal/projective line figure conflicts
+            const brokenFig = figs.find(f => figureHasConflict.has(f));
+            if (brokenFig !== undefined) {
+                return `❌ Ütközés a(z) ${FIGURES[brokenFig].name} betűnél: itt nem esik közös projektív egyenesre a többi ${FIGURES[brokenFig].name} lappal.`;
+            }
+
+            // 5. Remaining structural F4 orientation conflict
+            return '❌ Ez a lap ebben a mezőben nem egyeztethető össze a többi lerakott kártyával (a ferde egyenesek egyikével ütközik).';
+        }
+
+        function evaluateBoardFeedback() {
+            const placedGridSlots = [];
+            for (let s = 0; s < 16; s++) {
+                if (boardState[s] !== null) placedGridSlots.push(s);
+            }
+
+            const userPlacedCount = placedGridSlots.filter(s => !isSlotLocked(s)).length;
+            if (userPlacedCount === 0) {
+                const emptyMsg = currentMode === 'basic'
+                    ? 'Minden sorban és oszlopban adott 1-1 kezdőlap! Keresd meg az üres mezőkhöz azt a lapot, amelyiken a sorának és az oszlopának a közös betűje is rajta van!'
+                    : (currentMode === 'hard'
+                        ? 'Nehezített mód: 3 sorban és 3 oszlopban adott 1-1 kezdőlap. A hiányzó sor és oszlop betűjét kizárással vagy a meredekségekkel találod meg!'
+                        : 'Segítség nélkül: csak az 5 ideális pont adott (a meredekség-lépésekkel). Tegyél le egy kezdőlapot a 4×4-es rács egyik mezőjére!');
+                return {
+                    conflictSlots: new Set(),
+                    figureHasConflict: new Set(),
+                    compatibleBoardsCount: currentMode === 'none' ? VALID_BOARDS.length : 1,
+                    bestBoard: currentSeedBoard,
+                    status: 'empty',
+                    message: emptyMsg
+                };
+            }
+
+            const figureHasConflict = new Set();
+            for (let f = 0; f < 21; f++) {
+                if (getViableLinesForFigure(f).length === 0) {
+                    figureHasConflict.add(f);
+                }
+            }
+
+            let maxMatches = -1;
+            let bestBoard = VALID_BOARDS[0];
+            let bestNonLastMatches = -1;
+            let compatibleBoardsCount = 0;
+
+            VALID_BOARDS.forEach(candidate => {
+                let matches = 0;
+                let nonLastMatches = 0;
+                for (const s of placedGridSlots) {
+                    if (candidate[s] === boardState[s]) {
+                        matches++;
+                        if (s !== lastPlacedSlotId) nonLastMatches++;
+                    }
+                }
+                if (matches === placedGridSlots.length) compatibleBoardsCount++;
+
+                if (
+                    matches > maxMatches ||
+                    (matches === maxMatches && nonLastMatches > bestNonLastMatches)
+                ) {
+                    maxMatches = matches;
+                    bestNonLastMatches = nonLastMatches;
+                    bestBoard = candidate;
+                }
+            });
+
+            const conflictSlots = new Set();
+            if (maxMatches < placedGridSlots.length) {
+                for (const s of placedGridSlots) {
+                    if (bestBoard[s] !== boardState[s]) {
+                        conflictSlots.add(s);
+                    }
+                }
+            }
+
+            let validLinesCount = 0;
+            for (let f = 0; f < 21; f++) {
+                if (isFigureFormingValidLine(f)) validLinesCount++;
+            }
+
+            if (conflictSlots.size > 0) {
+                const targetSlot = (lastPlacedSlotId !== null && conflictSlots.has(lastPlacedSlotId))
+                    ? lastPlacedSlotId
+                    : Array.from(conflictSlots)[0];
+                const reason = explainSlotConflict(targetSlot, figureHasConflict);
+                return {
+                    conflictSlots,
+                    figureHasConflict,
+                    compatibleBoardsCount: 0,
+                    bestBoard,
+                    status: 'conflict',
+                    message: `${reason} (Kattints a piros lapra a visszavételhez!)`
+                };
+            }
+
+            if (validLinesCount === 21) {
+                return {
+                    conflictSlots,
+                    figureHasConflict,
+                    compatibleBoardsCount,
+                    bestBoard,
+                    status: 'victory',
+                    message: '🎉 Gratulálok! Mind a 21 lap a helyén van, és mind a 21 projektív egyenes teljesült!'
+                };
+            }
+
+            let extra = '';
+            if (lastPlacedSlotId !== null && boardState[lastPlacedSlotId] !== null) {
+                const justCompleted = PG24_CARDS[boardState[lastPlacedSlotId]]
+                    .filter(f => f < 20 && isFigureFormingValidLine(f))
+                    .map(f => FIGURES[f].name);
+                if (justCompleted.length > 0) {
+                    extra = ` Elkészült egyenes: ${justCompleted.join(', ')}!`;
+                }
+            }
+
+            return {
+                conflictSlots,
+                figureHasConflict,
+                compatibleBoardsCount,
+                bestBoard,
+                status: 'ok',
+                message: `✅ Helyes elhelyezés! Nincs ütközés (${validLinesCount}/21 egyenes kész).${extra}`
+            };
+        }
+        function isFigureFormingValidLine(figureId) {
+            const slotsWithFigure = [];
+            for (let s = 0; s < 21; s++) {
+                const c = boardState[s];
+                if (c !== null && PG24_CARDS[c].includes(figureId)) {
+                    slotsWithFigure.push(s);
+                }
+            }
+
+            if (slotsWithFigure.length !== 5) return false;
+            slotsWithFigure.sort((a, b) => a - b);
+
+            return PG24_LINES.some(line => {
+                const sortedLine = [...line].sort((a, b) => a - b);
+                return sortedLine.every((val, idx) => val === slotsWithFigure[idx]);
+            });
+        }
+
+        // =====================================================================
+        // 6. INTERACTION & FILTER LOGIC
+        // =====================================================================
+        function setFigureFilter(figId) {
+            if (activeFigureFilter === figId) {
+                activeFigureFilter = null;
+            } else {
+                activeFigureFilter = figId;
+            }
+            updateAll();
+        }
+
+        function clearFigureFilter() {
+            activeFigureFilter = null;
+            updateAll();
+        }
+
+        function selectCard(cardId) {
+            if (isCardLocked(cardId)) return;
+            if (selectedCardId === cardId) {
+                selectedCardId = null;
+            } else {
+                selectedCardId = cardId;
+            }
+            renderFilteredCards();
+            updateStatsBadges();
+        }
+
+        function handleSlotClick(slotId) {
+            if (isSlotLocked(slotId)) return;
+            if (selectedCardId !== null) {
+                // Place the selected card EXACTLY into this slot!
+                placeCardInSlot(selectedCardId, slotId);
+                selectedCardId = null;
+            } else {
+                // If clicked on an already placed card: return it to the deck
+                if (boardState[slotId] !== null) {
+                    returnCardToTray(slotId);
+                }
+            }
+        }
+
+        function placeCardInSlot(cardId, slotId) {
+            if (isSlotLocked(slotId) || isCardLocked(cardId)) return;
+
+            // If card was placed elsewhere on the board, clear its old slot
+            const oldSlotId = boardState.indexOf(cardId);
+            if (oldSlotId !== -1 && oldSlotId !== slotId) {
+                if (isSlotLocked(oldSlotId)) return;
+                boardState[oldSlotId] = null;
+            }
+
+            // Place card EXACTLY into slotId
+            boardState[slotId] = cardId;
+            lastPlacedSlotId = slotId;
+            updateAll();
+            checkAutomaticVictory();
+        }
+
+        function returnCardToTray(slotId) {
+            if (isSlotLocked(slotId)) return;
+            boardState[slotId] = null;
+            if (lastPlacedSlotId === slotId) lastPlacedSlotId = null;
+            updateAll();
+        }
+
+        function giveHint() {
+            const feedback = evaluateBoardFeedback();
+            const targetBoard = feedback.bestBoard;
+            // First try placing into an empty slot whose target card is still in the tray
+            for (let s = 0; s < 16; s++) {
+                if (boardState[s] === null && boardState.indexOf(targetBoard[s]) === -1) {
+                    placeCardInSlot(targetBoard[s], s);
+                    return;
+                }
+            }
+            // Otherwise fix a conflicting slot or place into remaining slot
+            for (let s = 0; s < 16; s++) {
+                if (boardState[s] !== targetBoard[s]) {
+                    placeCardInSlot(targetBoard[s], s);
+                    return;
+                }
+            }
+        }
+
+        function showSolution() {
+            if (confirm('Biztosan szeretnéd megjeleníteni a teljes helyes megoldást?')) {
+                const targetBoard = evaluateBoardFeedback().bestBoard;
+                for (let i = 0; i < 21; i++) {
+                    boardState[i] = targetBoard[i];
+                }
+                selectedCardId = null;
+                lastPlacedSlotId = null;
+                updateAll();
+                checkSolution();
+            }
+        }
+
+        function resetBoard() {
+            if (confirm(`Biztosan kiüríted az általad lerakott lapokat? (A ${lockedSlots.size} rögzített kezdőlap a helyén marad.)`)) {
+                resetBoardState();
+                updateAll();
+            }
+        }
+
+        function checkSolution() {
+            let validLines = 0;
+            const invalidFigures = [];
+
+            for (let f = 0; f < 21; f++) {
+                if (isFigureFormingValidLine(f)) {
+                    validLines++;
+                } else {
+                    invalidFigures.push(FIGURES[f].name);
+                }
+            }
+
+            if (validLines === 21) {
+                confetti({
+                    particleCount: 120,
+                    spread: 80,
+                    origin: { y: 0.6 }
+                });
+                alert('🎉 Gratulálok, tökéletesen megoldottad a feladatot!\nMind a 21 betű pontosan egy-egy érvényes projektív egyenest alkot a síkon!');
+            } else {
+                alert(`Még nem teljes a megoldás:\n${validLines} / 21 egyenes helyes.\nHiányzó vagy nem egyenes betűk: ${invalidFigures.slice(0, 5).join(', ')}${invalidFigures.length > 5 ? '...' : ''}`);
+            }
+        }
+
+        function checkAutomaticVictory() {
+            let validLines = 0;
+            for (let f = 0; f < 21; f++) {
+                if (isFigureFormingValidLine(f)) validLines++;
+            }
+            if (validLines === 21) {
+                confetti({
+                    particleCount: 120,
+                    spread: 80,
+                    origin: { y: 0.6 }
+                });
+            }
+        }
+    </script>
+</body>
+</html>
