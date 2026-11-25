@@ -80,11 +80,19 @@
                 <div class="px-2.5 py-1 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-600">
                     Ideális: <span id="ideal-count-badge" class="font-bold text-indigo-700">8 / 8</span>
                 </div>
+                <div class="flex items-center bg-white border border-slate-300 rounded-lg px-2 py-1 gap-1 shadow-xs">
+                    <label for="seed-input" class="text-[11px] font-bold text-slate-500 select-none">Seed:</label>
+                    <input id="seed-input" type="text" onkeydown="if(event.key==='Enter'){startBuildMode();}" placeholder="Kód (pl. 123)" title="Ha beírsz egy kódot, az Építsük fel! mindig ugyanazzal a 2 kezdőkártyával indul" class="w-24 sm:w-28 text-xs font-semibold text-slate-800 focus:outline-none bg-transparent">
+                    <button type="button" onclick="rollRandomSeedAndBuild()" title="Új véletlen seed kód és új kezdés" class="text-xs px-1 rounded hover:bg-slate-100 text-slate-500 hover:text-indigo-600 transition">🎲</button>
+                </div>
                 <button onclick="startBuildMode()" class="text-xs font-bold px-3.5 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs transition flex items-center gap-1">
                     <span>🔨</span><span>Építsük fel!</span>
                 </button>
-                <button id="btn-undo" onclick="undoLastAction()" disabled class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition flex items-center gap-1">
+                <button id="btn-undo" onclick="undoLastAction()" disabled class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition flex items-center gap-1">
                     <span>↩️</span><span>Visszavonás</span>
+                </button>
+                <button id="btn-redo" onclick="redoLastAction()" disabled class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition flex items-center gap-1">
+                    <span>↪️</span><span>Újra</span>
                 </button>
                 <button onclick="checkCompletedPlane()" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs transition flex items-center gap-1">
                     <span>✓</span><span>Ellenőrzés</span>
@@ -390,10 +398,12 @@
         let viewerCards = [null, null];
         let selectedPlaceSymId = null;
         let activeIdealHighlight = null; // 0..7 when all 8 ideal points placed
+        let activeSeed = '';
         let undoStack = [];
+        let redoStack = [];
 
-        function pushUndo() {
-            undoStack.push({
+        function captureSnapshot() {
+            return {
                 phase,
                 isShowcase,
                 gridState: gridState.map(row => [...row]),
@@ -402,22 +412,39 @@
                 viewerCards: [viewerCards[0], viewerCards[1]],
                 selectedPlaceSymId,
                 activeIdealHighlight
-            });
+            };
+        }
+
+        function applySnapshot(snap) {
+            phase = snap.phase;
+            isShowcase = snap.isShowcase;
+            gridState = snap.gridState.map(row => [...row]);
+            idealState = [...snap.idealState];
+            lookupPick = snap.lookupPick.map(p => ({ ...p }));
+            viewerCards = [snap.viewerCards[0], snap.viewerCards[1]];
+            selectedPlaceSymId = snap.selectedPlaceSymId;
+            activeIdealHighlight = snap.activeIdealHighlight;
+        }
+
+        function pushUndo() {
+            undoStack.push(captureSnapshot());
             if (undoStack.length > 80) undoStack.shift();
+            redoStack = [];
         }
 
         function undoLastAction() {
             if (undoStack.length === 0) return;
-            const prev = undoStack.pop();
-            phase = prev.phase;
-            isShowcase = prev.isShowcase;
-            gridState = prev.gridState;
-            idealState = prev.idealState;
-            lookupPick = prev.lookupPick;
-            viewerCards = prev.viewerCards;
-            selectedPlaceSymId = prev.selectedPlaceSymId;
-            activeIdealHighlight = prev.activeIdealHighlight;
+            redoStack.push(captureSnapshot());
+            applySnapshot(undoStack.pop());
             setStatusBanner('warn', 'Utolsó lépés visszavonva.');
+            updateAll();
+        }
+
+        function redoLastAction() {
+            if (redoStack.length === 0) return;
+            undoStack.push(captureSnapshot());
+            applySnapshot(redoStack.pop());
+            setStatusBanner('success', 'Lépés visszaállítva (Újra).');
             updateAll();
         }
 
@@ -425,25 +452,61 @@
         // 3. INITIALIZATION (COMPLETE GRID FIRST, THEN "ÉPÍTSÜK FEL!")
         // =====================================================================
         window.addEventListener('DOMContentLoaded', () => {
+            const urlSeed = new URLSearchParams(window.location.search).get('seed');
+            const seedEl = document.getElementById('seed-input');
+            if (urlSeed && seedEl) seedEl.value = urlSeed;
             startCompleteShowcase();
         });
 
-        function shuffleArray(arr) {
+        function hashSeedString(str) {
+            let h = 2166136261 >>> 0;
+            for (let i = 0; i < str.length; i++) {
+                h ^= str.charCodeAt(i);
+                h = Math.imul(h, 16777619);
+            }
+            return h >>> 0;
+        }
+
+        function createSeededRng(seedStr) {
+            let a = hashSeedString(String(seedStr));
+            return function() {
+                a = (a + 0x6D2B79F5) >>> 0;
+                let t = Math.imul(a ^ (a >>> 15), 1 | a);
+                t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+                return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+            };
+        }
+
+        function shuffleArray(arr, rng = Math.random) {
             const copy = [...arr];
             for (let i = copy.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
+                const j = Math.floor(rng() * (i + 1));
                 [copy[i], copy[j]] = [copy[j], copy[i]];
             }
             return copy;
         }
 
         function initDeck() {
-            // Keep the exact real Dobble symbol combinations per card; only shuffle card order & symbol order on display
-            deckCards = shuffleArray(PG27_CARDS).map(c => shuffleArray(c));
-            cardAIdx = Math.floor(Math.random() * 57);
+            const seedEl = document.getElementById('seed-input');
+            const typed = seedEl ? seedEl.value.trim() : '';
+            activeSeed = typed || String(1000 + Math.floor(Math.random() * 9000));
+            if (seedEl && !typed) {
+                seedEl.placeholder = `Aktív: ${activeSeed}`;
+            }
+
+            const rng = createSeededRng(activeSeed);
+            // Keep the exact real Dobble symbol combinations per card; deterministically shuffle deck & card symbol order
+            deckCards = shuffleArray(PG27_CARDS, rng).map(c => shuffleArray(c, rng));
+            cardAIdx = Math.floor(rng() * 57);
             do {
-                cardBIdx = Math.floor(Math.random() * 57);
+                cardBIdx = Math.floor(rng() * 57);
             } while (cardBIdx === cardAIdx);
+        }
+
+        function rollRandomSeedAndBuild() {
+            const seedEl = document.getElementById('seed-input');
+            if (seedEl) seedEl.value = String(1000 + Math.floor(Math.random() * 9000));
+            startBuildMode();
         }
 
         function startCompleteShowcase() {
@@ -457,6 +520,7 @@
             selectedPlaceSymId = null;
             activeIdealHighlight = null;
             undoStack = [];
+            redoStack = [];
             fillCanonicalSolutionFromStarters();
             setStatusBanner(null);
             updateAll();
@@ -473,7 +537,13 @@
             selectedPlaceSymId = null;
             activeIdealHighlight = null;
             undoStack = [];
-            setStatusBanner(null);
+            redoStack = [];
+            const seedEl = document.getElementById('seed-input');
+            if (seedEl && seedEl.value.trim()) {
+                setStatusBanner('success', `Seed (${activeSeed}) alapján ugyanaz a 2 kezdőkártya generálva.`);
+            } else {
+                setStatusBanner(null);
+            }
             updateAll();
         }
 
@@ -597,10 +667,17 @@
             // When all 8 ideal points are placed and no 1st lookup symbol is waiting,
             // clicking an ideal card shows/toggles its 7 parallel lines on the grid!
             if (kind === 'ideal' && currentSym !== null && allIdealsPlaced() && lookupPick.length === 0) {
+                const status = validateBoard();
+                if (status.valid) {
+                    alignSolvedPlaneToSlopes(true);
+                }
+                const symAfter = idealState[idealIdx];
                 activeIdealHighlight = activeIdealHighlight === idealIdx ? null : idealIdx;
                 if (activeIdealHighlight !== null) {
-                    const idealLabel = idealIdx === 0 ? 'H (vízszintes)' : (idealIdx === 1 ? 'V (függőleges)' : `Ideális ${idealIdx - 1}`);
-                    setStatusBanner('success', `${idealLabel} (${SYMBOLS[currentSym].name}) egyenesei láthatók a rácson!`);
+                    const idealLabel = idealIdx === 0
+                        ? 'H (vízszintes)'
+                        : (idealIdx === 1 ? 'V (függőleges)' : `Ideális ${idealIdx - 1} (meredekség: +${idealIdx - 1})`);
+                    setStatusBanner('success', `${idealLabel} (${SYMBOLS[symAfter].name}) egyenesei láthatók a rácson!`);
                 } else {
                     setStatusBanner(null);
                 }
@@ -808,24 +885,22 @@
             return deckCards.some(card => setArr.every(s => card.includes(s)));
         }
 
-        function checkCompletedPlane() {
-            const issues = [];
+        function validateBoard() {
             let gridFilled = 0, idealFilled = 0;
             for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) if (gridState[r][c] !== null) gridFilled++;
             for (let i = 0; i < 8; i++) if (idealState[i] !== null) idealFilled++;
 
             if (gridFilled < 49 || idealFilled < 8) {
-                setStatusBanner('warn', `Még nincs kész a teljes tábla! (Rács: ${gridFilled}/49, Ideális pontok: ${idealFilled}/8)`);
-                return;
+                return { valid: false, reason: 'incomplete', gridFilled, idealFilled };
             }
 
             const allPlaced = [...idealState];
             for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) allPlaced.push(gridState[r][c]);
             if (new Set(allPlaced).size !== 57) {
-                setStatusBanner('error', 'Valamelyik szimbólum többször szerepel! Mind az 57-nek pontosan egyszer kell megjelennie.');
-                return;
+                return { valid: false, reason: 'duplicate' };
             }
 
+            const issues = [];
             const H = idealState[0];
             const V = idealState[1];
             for (let r = 0; r < 7; r++) if (!cardMatchesSet([...gridState[r], H])) issues.push(`${r + 1}. sor`);
@@ -837,11 +912,98 @@
             }
             if (!cardMatchesSet(idealState)) issues.push('8 ideális pont');
 
-            if (issues.length === 0) {
-                confetti({ particleCount: 140, spread: 90, origin: { y: 0.6 } });
-                setStatusBanner('success', '🎉 Gratulálok! Tökéletes projektív sík! Kattints bármelyik ideális pontra az egyenesei kirajzolásához!');
+            return { valid: issues.length === 0, reason: issues.length ? 'mismatch' : null, issues };
+        }
+
+        function computeAlignedPlaneFromAnchors(H, V, O, Ex, Ey) {
+            const cardRow0 = findCardContainingPair(O, H).symbols;
+            const cardRow1 = findCardContainingPair(Ey, H).symbols;
+            const col0Card = findCardContainingPair(O, V).symbols;
+            const col1Card = findCardContainingPair(Ex, V).symbols;
+            const diag11 = col1Card.find(s => s !== Ex && s !== V && cardRow1.includes(s));
+
+            const infLine = findCardContainingPair(H, V).symbols;
+            const slope1Line = findCardContainingPair(O, diag11).symbols;
+            const I1 = slope1Line.find(s => infLine.includes(s));
+
+            const row0Ordered = [O, Ex];
+            for (let k = 1; k < 6; k++) {
+                const lSlope = findCardContainingPair(row0Ordered[k], I1).symbols;
+                const nextInRow1 = lSlope.find(s => s !== I1 && cardRow1.includes(s));
+                const lVert = findCardContainingPair(nextInRow1, V).symbols;
+                row0Ordered.push(lVert.find(s => s !== V && cardRow0.includes(s)));
+            }
+
+            const col0Ordered = [O, Ey];
+            for (let k = 1; k < 6; k++) {
+                const lSlope = findCardContainingPair(col0Ordered[k], I1).symbols;
+                const nextInCol1 = lSlope.find(s => s !== I1 && col1Card.includes(s));
+                const lHoriz = findCardContainingPair(nextInCol1, H).symbols;
+                col0Ordered.push(lHoriz.find(s => s !== H && col0Card.includes(s)));
+            }
+
+            const rowCards = col0Ordered.map(sym => findCardContainingPair(sym, H).symbols);
+            const colCards = row0Ordered.map(sym => findCardContainingPair(sym, V).symbols);
+            const alignedGrid = Array.from({ length: 7 }, (_, r) =>
+                Array.from({ length: 7 }, (_, c) => rowCards[r].find(s => colCards[c].includes(s)))
+            );
+
+            const alignedIdeals = [H, V];
+            for (let m = 1; m <= 6; m++) {
+                const l = findCardContainingPair(O, alignedGrid[m][1]).symbols;
+                alignedIdeals.push(l.find(s => infLine.includes(s)));
+            }
+            return { alignedGrid, alignedIdeals };
+        }
+
+        // Aligns a completed valid board to canonical slopes 1..6 starting from bottom-left (0,0).
+        function alignSolvedPlaneToSlopes(recordUndo = true) {
+            const H = idealState[0], V = idealState[1];
+            const O = gridState[0][0], Ex = gridState[0][1], Ey = gridState[1][0];
+            if ([H, V, O, Ex, Ey].some(x => x === null)) return false;
+
+            const { alignedGrid, alignedIdeals } = computeAlignedPlaneFromAnchors(H, V, O, Ex, Ey);
+            let changed = false;
+            for (let i = 0; i < 8; i++) {
+                if (idealState[i] !== alignedIdeals[i]) { changed = true; break; }
+            }
+            if (!changed) {
+                for (let r = 0; r < 7 && !changed; r++) {
+                    for (let c = 0; c < 7; c++) {
+                        if (gridState[r][c] !== alignedGrid[r][c]) { changed = true; break; }
+                    }
+                }
+            }
+            if (!changed) return false;
+
+            if (recordUndo) pushUndo();
+            gridState = alignedGrid;
+            idealState = alignedIdeals;
+            return true;
+        }
+
+        function checkCompletedPlane() {
+            const res = validateBoard();
+            if (!res.valid) {
+                if (res.reason === 'incomplete') {
+                    setStatusBanner('warn', `Még nincs kész a teljes tábla! (Rács: ${res.gridFilled}/49, Ideális pontok: ${res.idealFilled}/8)`);
+                } else if (res.reason === 'duplicate') {
+                    setStatusBanner('error', 'Valamelyik szimbólum többször szerepel! Mind az 57-nek pontosan egyszer kell megjelennie.');
+                } else {
+                    setStatusBanner('error', `Eltérés az alábbi egyeneseknél: ${res.issues.slice(0, 4).join(', ')}${res.issues.length > 4 ? '...' : ''}`);
+                }
+                return;
+            }
+
+            const reordered = alignSolvedPlaneToSlopes(true);
+            confetti({ particleCount: 140, spread: 90, origin: { y: 0.6 } });
+            if (reordered) {
+                lookupPick = [];
+                activeIdealHighlight = null;
+                setStatusBanner('success', '🎉 Tökéletes projektív sík! A sorok, oszlopok és az Ideális 1–6 pontok meredekség szerint (1–6) rendezve — kattints bármelyikre!');
+                updateAll();
             } else {
-                setStatusBanner('error', `Eltérés az alábbi egyeneseknél: ${issues.slice(0, 4).join(', ')}${issues.length > 4 ? '...' : ''}`);
+                setStatusBanner('success', '🎉 Gratulálok! Tökéletes projektív sík! Kattints bármelyik ideális pontra (Ideális 1–6 = meredekség 1–6) az egyenesei kirajzolásához!');
             }
         }
 
@@ -878,49 +1040,13 @@
                 idealState[1] = expectedV;
             }
             const V = idealState[1];
-
             const O = gridState[0][0];
             const Ex = gridState[0][1];
-            const col0Card = findCardContainingPair(O, V).symbols;
-            const Ey = col0Card.find(s => s !== O && s !== V && cardRow1.includes(s));
-            const col1Card = findCardContainingPair(Ex, V).symbols;
-            const diag11 = col1Card.find(s => s !== Ex && s !== V && cardRow1.includes(s));
+            const Ey = findCardContainingPair(O, V).symbols.find(s => s !== O && s !== V && cardRow1.includes(s));
 
-            const infLine = findCardContainingPair(H, V).symbols;
-            const slope1Line = findCardContainingPair(O, diag11).symbols;
-            const I1 = slope1Line.find(s => infLine.includes(s));
-
-            const row0Ordered = [O, Ex];
-            for (let k = 1; k < 6; k++) {
-                const lSlope = findCardContainingPair(row0Ordered[k], I1).symbols;
-                const nextInRow1 = lSlope.find(s => s !== I1 && cardRow1.includes(s));
-                const lVert = findCardContainingPair(nextInRow1, V).symbols;
-                const nextInRow0 = lVert.find(s => s !== V && cardRow0.includes(s));
-                row0Ordered.push(nextInRow0);
-            }
-
-            const col0Ordered = [O, Ey];
-            for (let k = 1; k < 6; k++) {
-                const lSlope = findCardContainingPair(col0Ordered[k], I1).symbols;
-                const nextInCol1 = lSlope.find(s => s !== I1 && col1Card.includes(s));
-                const lHoriz = findCardContainingPair(nextInCol1, H).symbols;
-                const nextInCol0 = lHoriz.find(s => s !== H && col0Card.includes(s));
-                col0Ordered.push(nextInCol0);
-            }
-
-            const rowCards = col0Ordered.map(sym => findCardContainingPair(sym, H).symbols);
-            const colCards = row0Ordered.map(sym => findCardContainingPair(sym, V).symbols);
-            for (let r = 0; r < 7; r++) {
-                for (let c = 0; c < 7; c++) {
-                    gridState[r][c] = rowCards[r].find(s => colCards[c].includes(s));
-                }
-            }
-
-            for (let m = 1; m <= 6; m++) {
-                const ptOnCol1 = gridState[m][1];
-                const l = findCardContainingPair(O, ptOnCol1).symbols;
-                idealState[1 + m] = l.find(s => infLine.includes(s));
-            }
+            const { alignedGrid, alignedIdeals } = computeAlignedPlaneFromAnchors(H, V, O, Ex, Ey);
+            gridState = alignedGrid;
+            idealState = alignedIdeals;
         }
 
         function autoCompletePlane() {
@@ -1006,6 +1132,8 @@
 
             const undoBtn = document.getElementById('btn-undo');
             if (undoBtn) undoBtn.disabled = undoStack.length === 0;
+            const redoBtn = document.getElementById('btn-redo');
+            if (redoBtn) redoBtn.disabled = redoStack.length === 0;
 
             const badge = document.getElementById('phase-badge');
             const inst = document.getElementById('phase-instruction');
@@ -1065,7 +1193,8 @@
 
             const rowCol = document.getElementById('row-controls-col');
             rowCol.innerHTML = '';
-            for (let r = 0; r < 7; r++) {
+            // Render top-to-bottom so Row 1 is at the bottom and Row 7 is at the top
+            for (let r = 6; r >= 0; r--) {
                 const wrap = document.createElement('div');
                 wrap.draggable = true;
                 wrap.title = `Húzd a(z) ${r + 1}. sort másik helyre`;
@@ -1091,8 +1220,8 @@
                 wrap.innerHTML = `
                     <span class="text-[10px] font-bold text-slate-600 mr-0.5">⠿${r + 1}</span>
                     <div class="flex flex-col gap-0.5">
-                        <button onclick="event.stopPropagation(); moveRow(${r}, -1)" ${r === 0 ? 'disabled' : ''} title="Sor fel" class="w-4 h-4 rounded hover:bg-white disabled:opacity-30 text-[8px] font-bold text-slate-600 flex items-center justify-center">▲</button>
-                        <button onclick="event.stopPropagation(); moveRow(${r}, 1)" ${r === 6 ? 'disabled' : ''} title="Sor le" class="w-4 h-4 rounded hover:bg-white disabled:opacity-30 text-[8px] font-bold text-slate-600 flex items-center justify-center">▼</button>
+                        <button onclick="event.stopPropagation(); moveRow(${r}, 1)" ${r === 6 ? 'disabled' : ''} title="Sor fel" class="w-4 h-4 rounded hover:bg-white disabled:opacity-30 text-[8px] font-bold text-slate-600 flex items-center justify-center">▲</button>
+                        <button onclick="event.stopPropagation(); moveRow(${r}, -1)" ${r === 0 ? 'disabled' : ''} title="Sor le" class="w-4 h-4 rounded hover:bg-white disabled:opacity-30 text-[8px] font-bold text-slate-600 flex items-center justify-center">▼</button>
                     </div>
                 `;
                 rowCol.appendChild(wrap);
@@ -1175,7 +1304,7 @@
                 });
             }
 
-            for (let r = 0; r < 7; r++) {
+            for (let r = 6; r >= 0; r--) {
                 for (let c = 0; c < 7; c++) {
                     const col = cellColorMap[`${r},${c}`] || null;
                     container.appendChild(createSlotElement('grid', r, c, -1, gridState[r][c], col));
@@ -1223,8 +1352,23 @@
             if (activeIdealHighlight === null || !allIdealsPlaced()) return;
 
             const SVG_NS = 'http://www.w3.org/2000/svg';
-            const parallelLines = getParallelLinesForIdeal(activeIdealHighlight);
-            const step = detectDominantStep(parallelLines);
+            // Map row index r (0=bottom .. 6=top) to SVG visual DOM row (0=top .. 6=bottom)
+            const parallelLines = getParallelLinesForIdeal(activeIdealHighlight).map(line => ({
+                color: line.color,
+                pts: line.pts.map(p => ({ r: 6 - p.r, c: p.c }))
+            }));
+
+            // For Ideális 1..6 (activeIdealHighlight 2..7), prefer exact slope m = idealIdx - 1 starting from bottom-left (dc=1, dr_dom=-m)
+            let step = null;
+            if (activeIdealHighlight >= 2) {
+                const m = activeIdealHighlight - 1;
+                const hasSlopeStep = parallelLines.some(line => {
+                    const ptSet = new Set(line.pts.map(p => `${p.r},${p.c}`));
+                    return line.pts.some(p => ptSet.has(`${p.r - m},${p.c + 1}`));
+                });
+                if (hasSlopeStep) step = { dc: 1, dr: -m };
+            }
+            if (!step) step = detectDominantStep(parallelLines);
             if (!step) return;
 
             const normLen = Math.hypot(step.dc, step.dr) || 1;
