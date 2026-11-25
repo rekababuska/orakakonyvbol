@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saját 7×7-es Dobble tervező</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+        }
+        .grid-cell, .ideal-cell {
+            transition: all 0.12s ease;
+            user-select: none;
+        }
+        .grid-cell:hover, .ideal-cell:hover {
+            border-color: #0284c7;
+        }
+        .cell-lookup-selected {
+            border-color: #0284c7 !important;
+            box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.42) !important;
+            background-color: #e0f2fe !important;
+        }
+        .cell-line-highlight {
+            border-color: #9333ea !important;
+            box-shadow: inset 0 0 0 2px rgba(147, 51, 234, 0.35);
+            background-color: #faf5ff !important;
+        }
+        .cell-locate-flash {
+            border-color: #f59e0b !important;
+            box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.48) !important;
+            background-color: #fef3c7 !important;
+            transform: scale(1.06);
+            z-index: 25;
+        }
+        .ideal-active-highlight {
+            border-color: #7c3aed !important;
+            box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.35) !important;
+            background-color: #f3e8ff !important;
+        }
+        .card-sym-btn {
+            transition: transform 0.12s ease, box-shadow 0.12s ease;
+            user-select: none;
+        }
+        .card-sym-btn:hover {
+            transform: scale(1.1);
+            z-index: 10;
+        }
+        svg {
+            display: block;
+        }
+        .icon-fit svg {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col p-2 sm:p-4 md:p-5 bg-slate-50">
+
+    <!-- HEADER -->
+    <header class="max-w-7xl mx-auto w-full mb-3">
+        <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pb-3 border-b border-slate-200">
+            <div>
+                <div class="flex items-center gap-2.5 flex-wrap">
+                    <h1 class="text-xl sm:text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
+                        Saját 7×7-es Dobble tervező
+                    </h1>
+                    <span id="status-badge" class="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        Kész projektív sík
+                    </span>
+                </div>
+                <p class="text-xs sm:text-sm text-slate-600 mt-1 max-w-3xl leading-relaxed">
+                    Rendezd át a meglévő táblát vagy ürítsd ki és építsd fel a sajátodat a szimbólumkeresőből húzással! Ha bármelyik <strong>2 szimbólumra</strong> kattintasz a táblán, a program a rács alapján generálja le a kártyájukat.
+                </p>
+            </div>
+
+            <div class="flex items-center gap-1.5 flex-wrap shrink-0">
+                <div class="px-2.5 py-1 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-600">
+                    Rács: <span id="grid-count-badge" class="font-bold text-slate-900">49 / 49</span>
+                </div>
+                <div class="px-2.5 py-1 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-600">
+                    Ideális: <span id="ideal-count-badge" class="font-bold text-indigo-700">8 / 8</span>
+                </div>
+                <button onclick="clearBoardToEmpty()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-slate-800 text-white hover:bg-slate-900 shadow-xs transition flex items-center gap-1">
+                    <span>🧹</span><span>Üres rács</span>
+                </button>
+                <button onclick="resetToCompleteGrid()" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 shadow-xs transition flex items-center gap-1">
+                    <span>✨</span><span>Kész rács</span>
+                </button>
+                <button id="btn-undo" onclick="undoLastAction()" disabled class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed shadow-xs transition flex items-center gap-1">
+                    <span>↩️</span><span>Visszavonás</span>
+                </button>
+                <button onclick="checkCompletedPlane()" class="text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs transition flex items-center gap-1">
+                    <span>✓</span><span>Ellenőrzés</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="max-w-7xl mx-auto w-full grid grid-cols-1 xl:grid-cols-12 gap-4 items-start flex-grow">
+
+        <!-- LEFT: 7x7 GRID + 8 IDEAL POINTS + LINE OVERLAY -->
+        <section class="xl:col-span-7 bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-sm flex flex-col items-center">
+            <div class="w-full overflow-x-auto pb-1">
+                <div class="min-w-[540px] max-w-[650px] mx-auto flex flex-col items-center gap-2">
+
+                    <!-- TOP IDEAL AREA: Vertical Ideal Point (V) + Ideals 1 & 2 -->
+                    <div class="w-full grid grid-cols-9 items-center gap-1.5 px-1">
+                        <div class="col-span-1"></div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-[10px] font-semibold text-indigo-600 mb-0.5">Ideális 1</span>
+                            <div id="ideal-slot-2"></div>
+                        </div>
+                        <div class="col-span-2"></div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-[10px] font-bold text-purple-700 mb-0.5">Függőleges (V)</span>
+                            <div id="ideal-slot-1"></div>
+                        </div>
+                        <div class="col-span-2"></div>
+                        <div class="flex flex-col items-center">
+                            <span class="text-[10px] font-semibold text-indigo-600 mb-0.5">Ideális 2</span>
+                            <div id="ideal-slot-3"></div>
+                        </div>
+                        <div class="col-span-1"></div>
+                    </div>
+
+                    <!-- DRAGGABLE COLUMN HEADERS -->
+                    <div id="col-controls-row" class="w-full grid grid-cols-9 items-center gap-1.5 px-1"></div>
+
+                    <!-- MIDDLE: DRAGGABLE ROW HEADERS + 7x7 GRID + HORIZONTAL IDEAL (H) -->
+                    <div class="w-full grid grid-cols-9 items-center gap-1.5 px-1">
+                        <div id="row-controls-col" class="col-span-1 flex flex-col justify-between gap-1.5"></div>
+
+                        <!-- 7x7 Grid with SVG overlay for parallel lines / generated line -->
+                        <div class="col-span-7 relative bg-slate-50 p-1.5 rounded-2xl border border-slate-200">
+                            <div id="grid-container" class="grid grid-cols-7 gap-1.5 relative z-10"></div>
+                            <svg id="grid-lines-overlay" viewBox="0 0 700 700" class="absolute inset-1.5 w-[calc(100%-0.75rem)] h-[calc(100%-0.75rem)] pointer-events-none z-20"></svg>
+                        </div>
+
+                        <!-- Right: Horizontal Ideal Point (H) -->
+                        <div class="col-span-1 flex flex-col items-center justify-center">
+                            <span class="text-[10px] font-bold text-sky-700 text-center leading-tight mb-1">Vízszintes<br>(H)</span>
+                            <div id="ideal-slot-0"></div>
+                        </div>
+                    </div>
+
+                    <!-- BOTTOM IDEAL POINTS (Ideális 3..6) -->
+                    <div class="w-full grid grid-cols-9 items-center gap-1.5 px-1 pt-1">
+                        <div class="col-span-1"></div>
+                        <div class="flex flex-col items-center">
+                            <div id="ideal-slot-4"></div>
+                            <span class="text-[10px] font-semibold text-indigo-600 mt-0.5">Ideális 3</span>
+                        </div>
+                        <div class="col-span-1"></div>
+                        <div class="flex flex-col items-center">
+                            <div id="ideal-slot-5"></div>
+                            <span class="text-[10px] font-semibold text-indigo-600 mt-0.5">Ideális 4</span>
+                        </div>
+                        <div class="col-span-1"></div>
+                        <div class="flex flex-col items-center">
+                            <div id="ideal-slot-6"></div>
+                            <span class="text-[10px] font-semibold text-indigo-600 mt-0.5">Ideális 5</span>
+                        </div>
+                        <div class="col-span-1"></div>
+                        <div class="flex flex-col items-center">
+                            <div id="ideal-slot-7"></div>
+                            <span class="text-[10px] font-semibold text-indigo-600 mt-0.5">Ideális 6</span>
+                        </div>
+                        <div class="col-span-1"></div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- Board Status Banner -->
+            <div id="board-status-banner" class="hidden w-full mt-2 px-3 py-2 rounded-xl border text-xs font-semibold text-center"></div>
+        </section>
+
+        <!-- RIGHT: SYMBOL SEARCH BAR + GENERATED DOBBLE CARD -->
+        <aside class="xl:col-span-5 space-y-3 sm:space-y-4">
+
+            <!-- SYMBOL SEARCH PALETTE -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-sm space-y-2.5">
+                <div class="flex items-center justify-between gap-2 pb-2 border-b border-slate-100 flex-wrap">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                        <h2 class="text-xs sm:text-sm font-bold text-slate-800">
+                            Szimbólum kereső (57 ikon)
+                        </h2>
+                    </div>
+                    <div class="flex items-center gap-1 text-[11px]">
+                        <button id="filter-all-btn" onclick="setPaletteFilter('all')" class="px-2 py-0.5 rounded-md font-semibold bg-slate-800 text-white transition">Mind</button>
+                        <button id="filter-unplaced-btn" onclick="setPaletteFilter('unplaced')" class="px-2 py-0.5 rounded-md font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition">Hiányzó (<span id="unplaced-count">0</span>)</button>
+                    </div>
+                </div>
+
+                <!-- Search input -->
+                <div class="relative">
+                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">🔍</span>
+                    <input id="symbol-search-input" type="text" oninput="handleSearchInput(this.value)" placeholder="Keresés név szerint (pl. macska, dínó, szív, hóember)..." class="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-slate-50 focus:bg-white transition">
+                    <button id="btn-clear-search" onclick="clearSearchQuery()" class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-600 text-xs font-bold flex items-center justify-center">×</button>
+                </div>
+
+                <!-- Selected symbol banner when click-placing from palette -->
+                <div id="palette-pick-bar" class="hidden px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-xs flex items-center justify-between gap-2">
+                    <div class="flex items-center gap-2">
+                        <span class="font-bold text-amber-900">Elhelyezendő:</span>
+                        <span id="palette-pick-chip" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white border border-amber-300"></span>
+                        <span class="text-[11px] text-amber-800 hidden sm:inline">→ kattints egy mezőre</span>
+                    </div>
+                    <button onclick="clearSelectedPaletteSymbol()" class="text-[11px] text-amber-800 hover:underline font-semibold">Mégsem</button>
+                </div>
+
+                <!-- Filtered symbol results grid -->
+                <div id="symbol-palette-grid" class="grid grid-cols-4 sm:grid-cols-5 gap-1.5 max-h-56 overflow-y-auto pr-1 py-0.5"></div>
+                <p class="text-[11px] text-slate-500 leading-snug">
+                    Húzz bármelyik szimbólumot a rácsra/ideális pontra (vagy kattints rá, majd egy mezőre). A már lerakott jelre kattintva felvillan a helye a táblán!
+                </p>
+            </div>
+
+            <!-- GENERATED CARD FROM GRID -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-sm space-y-2.5">
+                <div class="flex items-center justify-between gap-2 pb-2 border-b border-slate-100">
+                    <div class="flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+                        <h2 class="text-xs sm:text-sm font-bold text-slate-800">
+                            Generált Dobble kártya (a rács alapján)
+                        </h2>
+                    </div>
+                    <button onclick="clearCardSelection()" class="text-[11px] text-sky-700 hover:underline font-semibold">Kijelölés törlése</button>
+                </div>
+
+                <!-- Selection Chips -->
+                <div class="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-sky-50 border border-sky-200 text-xs">
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <span class="font-semibold text-sky-900">Kiválasztva:</span>
+                        <div id="card-pick-chips" class="flex items-center gap-1.5"></div>
+                    </div>
+                    <span id="generated-line-badge" class="text-[11px] font-bold text-purple-700"></span>
+                </div>
+
+                <div class="flex flex-col items-center justify-center py-1 gap-2">
+                    <div id="generated-card-container"></div>
+                    <div id="generated-card-caption" class="text-xs text-slate-600 text-center"></div>
+                </div>
+            </div>
+
+            <!-- COMPACT USAGE TIPS -->
+            <div class="bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-sm text-xs text-slate-600 space-y-1">
+                <div class="font-bold text-slate-800">Használati tippek:</div>
+                <ul class="list-disc pl-4 space-y-1">
+                    <li><strong>Mozgatás / csere:</strong> húzd a szimbólumokat egyik mezőről a másikra, vagy húzd a <strong>sor- és oszlopfejléceket</strong> (1–7).</li>
+                    <li><strong>Keresés és elhelyezés:</strong> írj a keresőbe, és húzd a szimbólumot egy rácsmezőre vagy ideális pontra.</li>
+                    <li><strong>Kártya generálása a rácsból:</strong> kattints a táblán bármely <strong>2 szimbólumra</strong> — a program az őket összekötő rácsegyenes (+ ideális pont) alapján építi fel a kártyát!</li>
+                </ul>
+            </div>
+
+        </aside>
+    </main>
+
+    <script>
+        // =====================================================================
+        // 1. EXACT 57 REAL DOBBLE SYMBOLS & COMPLETE REFERENCE PLANE DATA
+        // =====================================================================
+        const PG27_CARDS = (() => {
+            const L = [
+                [42, 38, 54, 34,  9, 14, 35, 41], // L0
+                [42, 46, 47, 43, 28,  0, 10, 32], // L1
+                [42, 45,  7, 53, 31, 25,  5, 48], // L2 (m=6)
+                [42, 20,  2, 56, 13,  6, 24, 17], // L3 (m=4)
+                [42,  1, 36, 37, 44, 29, 50,  3], // L4 (m=2)
+                [42,  8, 39, 19, 18, 49, 22, 51], // L5 (m=1)
+                [42, 16, 26, 52, 27, 15, 21, 40], // L6 (m=5)
+                [42, 23, 33,  4, 55, 11, 12, 30]  // L7 (m=3)
+            ];
+            const mult = [null, null, 6, 4, 2, 1, 5, 3];
+            const cards = L.map(line => [...line]);
+            for (let r = 0; r < 7; r++) {
+                for (let c = 0; c < 7; c++) {
+                    const card = [L[0][r + 1], L[1][c + 1]];
+                    for (let k = 2; k <= 7; k++) {
+                        card.push(L[k][1 + ((c + r * mult[k]) % 7)]);
+                    }
+                    cards.push(card);
+                }
+            }
+            return cards;
+        })();
+
+        // Original Spot It! / Dobble cartoon-illustrated 57 symbols
+        const SYMBOLS = [
+            { id: 0,  name: 'Horgony',       svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="5" r="2.2" fill="#fed7aa" stroke="#9a3412" stroke-width="1.4"/><path d="M12 7.2V20.5M5.5 13a6.5 6.5 0 0013 0M8.5 10.5h7" stroke="#ea580c" stroke-width="2.6" stroke-linecap="round"/><path d="M5.5 13l-1-1.5M18.5 13l1-1.5" stroke="#9a3412" stroke-width="2" stroke-linecap="round"/></svg>' },
+            { id: 1,  name: 'Alma',          svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 6.5C8 6 5 9 5 13.8c0 4.2 3.3 7.2 7 7.2s7-3 7-7.2C19 9 16 6 12 6.5z" fill="#22c55e" stroke="#14532d" stroke-width="1.3"/><path d="M9 11c0-1.5 1-2.5 2-2.5" stroke="#bbf7d0" stroke-width="1.4" stroke-linecap="round"/><path d="M12 6C12 4 13.5 2.5 15.5 3" stroke="#78350f" stroke-width="1.9" stroke-linecap="round"/><path d="M12 5c-1.5-2-4-2-4.5 0 2 .5 3.5 1 4.5 0z" fill="#4ade80" stroke="#14532d" stroke-width="0.9"/></svg>' },
+            { id: 2,  name: 'Cumisüveg',     svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M10 2.5h4l.6 2.5H9.4L10 2.5z" fill="#fbbf24" stroke="#78350f" stroke-width="1"/><rect x="8.5" y="5" width="7" height="2.6" rx="1" fill="#0284c7" stroke="#0c4a6e" stroke-width="1"/><rect x="7.5" y="7.6" width="9" height="13.4" rx="2.5" fill="#f8fafc" stroke="#0c4a6e" stroke-width="1.4"/><path d="M8.2 14h7.6v4.8a1.8 1.8 0 01-1.8 1.8h-4a1.8 1.8 0 01-1.8-1.8V14z" fill="#7dd3fc"/><path d="M9.8 11h2.5M9.8 13.5h2" stroke="#0284c7" stroke-width="1.3"/></svg>' },
+            { id: 3,  name: 'Bomba',         svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="10.5" cy="14" r="6.8" fill="#1e293b" stroke="#020617" stroke-width="1.3"/><path d="M7.5 11.5a3.2 3.2 0 013.2-2.2" stroke="#94a3b8" stroke-width="1.6" stroke-linecap="round"/><path d="M14.5 8l3-3" stroke="#78350f" stroke-width="2"/><path d="M19 2l1 2.2 2.2-.5-1.6 1.8 1 2-2-.8-1.5 1.5V6l-1.8-.8 1.8-1z" fill="#ef4444" stroke="#facc15" stroke-width="0.7"/></svg>' },
+            { id: 4,  name: 'Kaktusz',       svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="10" y="3" width="4" height="13" rx="2" fill="#22c55e" stroke="#14532d" stroke-width="1.2"/><path d="M6.5 8.5v2.5a2.2 2.2 0 002.2 2.2h1.3M17.5 9.5v2.2a2.2 2.2 0 01-2.2 2.2h-1.3" stroke="#16a34a" stroke-width="2.8" stroke-linecap="round"/><path d="M8 16h8l-1 5H9l-1-5z" fill="#ea580c" stroke="#7c2d12" stroke-width="1.2"/></svg>' },
+            { id: 5,  name: 'Gyertya',       svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="8.5" y="10" width="7" height="11" rx="1.2" fill="#9333ea" stroke="#4c1d95" stroke-width="1.2"/><path d="M8.5 13.5l7 2M8.5 17.5l7 2" stroke="#f3e8ff" stroke-width="1.4"/><path d="M12 10V7.5" stroke="#0f172a" stroke-width="1.4"/><path d="M12 2c-1.8 2.2-2.2 3.8-1 5.2a2.2 2.2 0 002 0c1.2-1.4.8-3-1-5.2z" fill="#f59e0b" stroke="#b45309" stroke-width="0.8"/></svg>' },
+            { id: 6,  name: 'Taxi',          svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="9.5" y="4.5" width="5" height="2.4" rx="0.7" fill="#fde047" stroke="#854d0e" stroke-width="0.9"/><path d="M3.5 13l2-6h13l2 6v5.5h-2v-1.8H5.5v1.8h-2V13z" fill="#f97316" stroke="#7c2d12" stroke-width="1.2"/><path d="M6.5 8.5l-1 3.5h13l-1-3.5H6.5z" fill="#ffedd5" stroke="#7c2d12" stroke-width="0.9"/><circle cx="7.5" cy="17.5" r="2.1" fill="#0f172a"/><circle cx="16.5" cy="17.5" r="2.1" fill="#0f172a"/></svg>' },
+            { id: 7,  name: 'Répa',          svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M14.5 7l-10 13.5 13.5-10L14.5 7z" fill="#f97316" stroke="#9a3412" stroke-width="1.2" stroke-linejoin="round"/><path d="M10.5 12l2 1.5M8 15.5l1.8 1.2" stroke="#7c2d12" stroke-width="1.3" stroke-linecap="round"/><path d="M15.5 7.5l4-3.5m-3 4.5l4.5-.5m-6.5-2l1-3.5" stroke="#16a34a" stroke-width="2" stroke-linecap="round"/></svg>' },
+            { id: 8,  name: 'Huszár',        svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M15.5 4.2L14 2l-2 2C8 4.8 5.8 7.8 5.8 11.2l3.8.6 1.7-2c.6 2.6-1.4 5-3.8 7.2v2h11.2v-2c0-4.2-1-8.8-3.2-12.8z" fill="#0f172a" stroke="#020617" stroke-width="1"/><rect x="6" y="19" width="12.5" height="2.4" rx="0.8" fill="#0f172a"/><circle cx="10.2" cy="7.5" r="0.9" fill="#fff"/></svg>' },
+            { id: 9,  name: 'Óra',           svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.8" fill="#fff" stroke="#78350f" stroke-width="2.5"/><path d="M12 6.8v5.2l3.8 2.2" stroke="#0f172a" stroke-width="2.1" stroke-linecap="round"/><circle cx="12" cy="12" r="1.2" fill="#dc2626"/></svg>' },
+            { id: 10, name: 'Bohóc',         svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="14" r="6" fill="#fff" stroke="#991b1b" stroke-width="1.3"/><path d="M5 12.5c-.6-2.5 1-4.5 2.8-4.5M19 12.5c.6-2.5-1-4.5-2.8-4.5" stroke="#dc2626" stroke-width="3.2" stroke-linecap="round"/><path d="M8 8.5l4-6 4 6z" fill="#dc2626" stroke="#7f1d1d" stroke-width="1"/><circle cx="12" cy="5.8" r="0.9" fill="#fff"/><circle cx="12" cy="14" r="2.1" fill="#ef4444" stroke="#991b1b" stroke-width="0.8"/><circle cx="9.6" cy="11.8" r="0.9" fill="#0f172a"/><circle cx="14.4" cy="11.8" r="0.9" fill="#0f172a"/><path d="M8.5 16.5a4 4 0 007 0" stroke="#dc2626" stroke-width="1.9" stroke-linecap="round"/></svg>' },
+            { id: 11, name: 'Margareta',     svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="5.5" r="3" fill="#fff" stroke="#64748b" stroke-width="1.1"/><circle cx="17.5" cy="8.5" r="3" fill="#fff" stroke="#64748b" stroke-width="1.1"/><circle cx="17.5" cy="15.5" r="3" fill="#fff" stroke="#64748b" stroke-width="1.1"/><circle cx="12" cy="18.5" r="3" fill="#fff" stroke="#64748b" stroke-width="1.1"/><circle cx="6.5" cy="15.5" r="3" fill="#fff" stroke="#64748b" stroke-width="1.1"/><circle cx="6.5" cy="8.5" r="3" fill="#fff" stroke="#64748b" stroke-width="1.1"/><circle cx="12" cy="12" r="3.6" fill="#eab308" stroke="#a16207" stroke-width="1"/></svg>' },
+            { id: 12, name: 'T-Rex dínó',    svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6 6.5c0-2.2 2-3.5 4.8-3.5H13l.5 2-2.5.4 2.5 1.4-2 .7c1 2.2 2.8 4.8 4.5 6.8 1.5 1.7 3.2 2.5 5 2.7-2.2 1.2-5 1.2-7.5-.4V21h-2.2v-3.8l-2 .2V21H7.2v-4.5c-.5-1.2-.2-2.8.8-4.5L6.5 11l-.5-4.5z" fill="#65a30d" stroke="#14532d" stroke-width="1.2" stroke-linejoin="round"/><path d="M7.5 10.5l-2.2 1" stroke="#14532d" stroke-width="1.4" stroke-linecap="round"/><circle cx="8.5" cy="5" r="0.8" fill="#0f172a"/></svg>' },
+            { id: 13, name: 'Delfin',        svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 16c2.5-6.5 7.5-9.5 13-9.5 1.5 0 3.2.8 4 2l-2 1c-2.5.5-4.5 2-6 4.5L15 16l-3-1c-2 1-4.5 2-8 1zm6-7l2-3.5 1.5 3.5" fill="#0284c7" stroke="#0c4a6e" stroke-width="1.1" stroke-linejoin="round"/><circle cx="17" cy="9" r="0.8" fill="#fff"/></svg>' },
+            { id: 14, name: 'Sárkány',       svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M7 9l-3.5-1 2.5-2.5 3.5.5c2-2 5-3 7.5-1.5l1.5-2 1.2 3-1.5 2c1.2 2.5.5 6-2 8.2-1.8 1.6-1.5 3.5 1.2 4.3-2.5 1-5.5 0-6.2-2.5-1.5-.8-2.5-2.2-2.5-4L7 9z" fill="#9333ea" stroke="#4c1d95" stroke-width="1.2" stroke-linejoin="round"/><path d="M12.5 7c2.8-2 5.8-1 6.5 2.5-2-.5-4 0-5.5 1.5" fill="#c084fc" stroke="#4c1d95" stroke-width="1"/></svg>' },
+            { id: 15, name: 'Felkiáltójel',  svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><g transform="rotate(14 12 12)"><path d="M9.5 2.5h5.2l-1.1 12h-3l-1.1-12z" fill="#facc15" stroke="#854d0e" stroke-width="1.3" stroke-linejoin="round"/><circle cx="12.1" cy="18.8" r="2.4" fill="#facc15" stroke="#854d0e" stroke-width="1.3"/></g></svg>' },
+            { id: 16, name: 'Szem',          svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M2 12s4-6.5 10-6.5S22 12 22 12s-4 6.5-10 6.5S2 12 2 12z" fill="#faf5ff" stroke="#581c87" stroke-width="1.8"/><circle cx="12" cy="12" r="4" fill="#7e22ce"/><circle cx="12" cy="12" r="1.7" fill="#0f172a"/><circle cx="13.2" cy="10.8" r="0.8" fill="#fff"/></svg>' },
+            { id: 17, name: 'Tűz',           svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2c1.5 4.5-2.5 6.5-2 10 1 1 2 0 2.5-1.5C15 12 18 14.5 18 17.5A6 6 0 016 17.5C6 12.5 9.5 8 12 2z" fill="#ea580c" stroke="#9a3412" stroke-width="1.1"/><path d="M12 12c-1 2-2 3.5-2 5a2 2 0 004 0c0-1.5-.8-3-2-5z" fill="#fde047"/></svg>' },
+            { id: 18, name: 'Lóhere',        svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="8" cy="8" r="3.8" fill="#16a34a" stroke="#14532d" stroke-width="1"/><circle cx="16" cy="8" r="3.8" fill="#16a34a" stroke="#14532d" stroke-width="1"/><circle cx="8" cy="15.5" r="3.8" fill="#16a34a" stroke="#14532d" stroke-width="1"/><circle cx="16" cy="15.5" r="3.8" fill="#16a34a" stroke="#14532d" stroke-width="1"/><path d="M12 12c0 4 0 7 2 9.5" stroke="#14532d" stroke-width="2.2" stroke-linecap="round"/></svg>' },
+            { id: 19, name: 'Szellem',       svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M13 2.5c-3 0-4.8 2.2-4.8 5.2V19l2-1.5 2 1.5 2-1.5 2 1.5V7.7c0-3-1.5-5.2-3.2-5.2z" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.4"/><circle cx="11.2" cy="7.5" r="0.9" fill="#0369a1"/><circle cx="14.2" cy="7.5" r="0.9" fill="#0369a1"/><path d="M10.5 11.5h4.5a2 2 0 01-4.5 0z" fill="#fff" stroke="#0369a1" stroke-width="0.9"/><path d="M16.2 18.2l2.2 1.5" stroke="#0284c7" stroke-width="1.2" stroke-dasharray="1.2 1"/><circle cx="19.2" cy="20.2" r="1.8" fill="#38bdf8" stroke="#0369a1" stroke-width="1"/></svg>' },
+            { id: 20, name: 'Zöld paca',     svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="#65a30d" stroke="#365314" stroke-width="0.8"><path d="M10 6.5c2-3 5.5-2 4.5 1.5 3-1 5 2 2.2 4 2.5 2 1 5.5-2 4.5 0 3-3.5 4-4.5 1.5-2.5 2-5.5 0-4-2.5-3-1-2.5-5 1-5 .8-2 2-3 2.8-1.5z"/><circle cx="19.5" cy="5.5" r="1.5"/><circle cx="18.5" cy="18.5" r="1.2"/><circle cx="5" cy="5.5" r="1.2"/></svg>' },
+            { id: 21, name: 'Kalapács',      svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4.5 7.5l4.5-4.5 5 5-4.5 4.5-5-5z" fill="#a16207" stroke="#451a03" stroke-width="1.1"/><path d="M9.5 10.5l9.5 9.5-2 2-9.5-9.5" fill="#d97706" stroke="#451a03" stroke-width="1.1"/></svg>' },
+            { id: 22, name: 'Szív',          svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 21l-1.5-1.4C5.2 14.9 2 12 2 8.2 2 5.1 4.4 3 7.5 3c1.8 0 3.5.9 4.5 2.2C13 3.9 14.7 3 16.5 3 19.6 3 22 5.1 22 8.2c0 3.8-3.2 6.7-8.5 11.4L12 21z" fill="#dc2626" stroke="#7f1d1d" stroke-width="1.3"/><path d="M6.2 6.5a2 2 0 012-1.5" stroke="#fecaca" stroke-width="1.5" stroke-linecap="round"/></svg>' },
+            { id: 23, name: 'Jégkocka',      svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="18.5" rx="9.5" ry="2.6" fill="#7dd3fc"/><path d="M12 4.5l6.5 3v7.5L12 18l-6.5-3V7.5L12 4.5z" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.4"/><path d="M12 11l6.5-3.5M12 11v7M12 11L5.5 7.5" stroke="#7dd3fc" stroke-width="1.3"/></svg>' },
+            { id: 24, name: 'Iglu',          svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 18a9 9 0 0118 0H3z" fill="#bae6fd" stroke="#0369a1" stroke-width="1.6"/><path d="M9.5 18v-3a2.5 2.5 0 015 0v3" fill="#0c4a6e"/><path d="M5 13h14M12 9v3" stroke="#0284c7" stroke-width="1.2"/></svg>' },
+            { id: 25, name: 'Kulcs',         svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="#ca8a04" stroke="#713f12" stroke-width="1"><path d="M7.5 14.5A5 5 0 107.5 4.5a5 5 0 000 10zm0-7a2 2 0 110 4 2 2 0 010-4z"/><path d="M11.5 9.5h10v3h-2v2.5h-2.5v-2.5h-2v2.5H11.5v-5.5z"/></svg>' },
+            { id: 26, name: 'Katica',        svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="13.5" rx="6.5" ry="7.5" fill="#ef4444" stroke="#0f172a" stroke-width="1.4"/><path d="M8.5 7.5a3.5 3.5 0 017 0H8.5z" fill="#0f172a"/><path d="M12 7.5v13.5" stroke="#0f172a" stroke-width="1.4"/><circle cx="9.5" cy="12" r="1.1" fill="#0f172a"/><circle cx="14.5" cy="12" r="1.1" fill="#0f172a"/><circle cx="10" cy="16.5" r="1.1" fill="#0f172a"/><circle cx="14" cy="16.5" r="1.1" fill="#0f172a"/></svg>' },
+            { id: 27, name: 'Villanykörte',  svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2.5a6.2 6.2 0 00-4.2 10.8c.8.8 1.2 1.8 1.2 2.7h6c0-.9.4-1.9 1.2-2.7A6.2 6.2 0 0012 2.5z" fill="#fef9c3" stroke="#eab308" stroke-width="1.8"/><path d="M10.2 15.5V10c0-1 3.6-1 3.6 0v5.5" stroke="#ca8a04" stroke-width="1.3"/><rect x="9.5" y="16" width="5" height="2.4" fill="#fde047" stroke="#854d0e" stroke-width="0.9"/><rect x="10" y="18.6" width="4" height="2" rx="1" fill="#94a3b8" stroke="#475569" stroke-width="0.8"/></svg>' },
+            { id: 28, name: 'Villám',        svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M14.5 2L5 13.5h5.8L9 22l10.2-11.8h-5.8L14.5 2z" fill="#facc15" stroke="#854d0e" stroke-width="1.2" stroke-linejoin="round"/></svg>' },
+            { id: 29, name: 'Lakat',         svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="5" y="10" width="14" height="11" rx="2" fill="#1e293b" stroke="#020617" stroke-width="1.2"/><path d="M8 10V7a4 4 0 018 0v3" stroke="#475569" stroke-width="2.5"/><circle cx="12" cy="15.5" r="1.6" fill="#f8fafc"/></svg>' },
+            { id: 30, name: 'Juharlevél',    svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2l1.8 4 3.5-1.2-1 3.8 4.2 1.2-2.8 2.8 1 2.2-5.5-1V22h-2.4v-8.2l-5.5 1 1-2.2L3.5 9.8l4.2-1.2-1-3.8L10.2 6 12 2z" fill="#dc2626" stroke="#7f1d1d" stroke-width="1.1" stroke-linejoin="round"/><path d="M12 6v9M12 13l4-3M12 13l-4-3" stroke="#991b1b" stroke-width="1"/></svg>' },
+            { id: 31, name: 'Hold',          svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="#facc15" stroke="#a16207" stroke-width="1.3"><path d="M20 13.5A8.5 8.5 0 1110.5 4a6.8 6.8 0 009.5 9.5z"/></svg>' },
+            { id: 32, name: 'Behajtani tilos', svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="#dc2626" stroke="#7f1d1d" stroke-width="1.2"/><rect x="6" y="10.2" width="12" height="3.6" rx="1" fill="#fff"/></svg>' },
+            { id: 33, name: 'Madárijesztő',  svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M7.5 6.5h9l-1.8-3.5H9.3L7.5 6.5z" fill="#92400e" stroke="#451a03" stroke-width="1"/><path d="M6 6.5h12" stroke="#451a03" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="9.2" r="2.6" fill="#fed7aa" stroke="#9a3412" stroke-width="1"/><path d="M9 12h6l2.5 5.5-1.5.8L14 14.5V21h-1.8v-4h-.4v4H10v-6.5l-2 3.8-1.5-.8L9 12z" fill="#f97316" stroke="#9a3412" stroke-width="1" stroke-linejoin="round"/></svg>' },
+            { id: 34, name: 'Ceruza',        svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4 20l1.5-4.5L16.5 4.5l3 3L8.5 18.5 4 20z" fill="#3b82f6" stroke="#1e3a8a" stroke-width="1.3"/><path d="M14.5 6.5l3 3" stroke="#f8fafc" stroke-width="1.6"/></svg>' },
+            { id: 35, name: 'Lila madár',    svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 17c1-4 4-6 7-6 1.5-3 4-4 6-3l2.5 1-2 1.5c0 4-3 7.5-8 8.5L5 17z" fill="#9333ea" stroke="#4c1d95" stroke-width="1.1"/><path d="M18.5 8l3 1-3 1" fill="#f59e0b"/><circle cx="16.5" cy="9" r="0.9" fill="#fff"/></svg>' },
+            { id: 36, name: 'Lila macska',   svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M6 16c-2.5 0-3.5-2-2.5-3.5" stroke="#6b21a8" stroke-width="2" stroke-linecap="round"/><path d="M7 14h10l1 6H6l1-6z" fill="#9333ea" stroke="#4c1d95" stroke-width="1.1"/><rect x="6" y="7" width="12" height="8" rx="3" fill="#a855f7" stroke="#4c1d95" stroke-width="1.2"/><path d="M6.5 8l1-4.5 3.5 3.5M17.5 8l-1-4.5-3.5 3.5" fill="#9333ea" stroke="#4c1d95" stroke-width="1.1" stroke-linejoin="round"/><circle cx="9.8" cy="10.5" r="0.9" fill="#fff"/><circle cx="14.2" cy="10.5" r="0.9" fill="#fff"/><path d="M4 11l3 .5M4 12.8l3-.3M20 11l-3 .5M20 12.8l-3-.3" stroke="#4c1d95" stroke-width="1"/></svg>' },
+            { id: 37, name: 'Dobble kéz',    svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M9 17.5l-1.5 3M14.5 17.5l1.5 3" stroke="#4c1d95" stroke-width="2" stroke-linecap="round"/><path d="M5.5 12.5L4 9.5c-.5-1 .8-1.8 1.5-.8L7 11V5.5c0-1 1.6-1 1.6 0V10V3.8c0-1 1.7-1 1.7 0V10V4.5c0-1 1.7-1 1.7 0V10l1.8-4c.5-1 2-.3 1.5.7L14 11.5c1.5 1 2 3 1 5-1 1.8-3 2.5-5.5 2-2.5-.5-4-2.5-4-6z" fill="#9333ea" stroke="#4c1d95" stroke-width="1.1"/><circle cx="10.2" cy="12.5" r="2.2" fill="#fff" stroke="#4c1d95" stroke-width="0.8"/><circle cx="10.4" cy="12.5" r="1" fill="#0f172a"/><path d="M8.5 15.8a2.5 2.5 0 004 0" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/></svg>' },
+            { id: 38, name: 'Piros ajkak',   svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M2 12c3-3.5 6.5-4.5 10-2 3.5-2.5 7-1.5 10 2-3.5 5-6.5 6.5-10 6.5S5.5 17 2 12z" fill="#dc2626" stroke="#7f1d1d" stroke-width="1.3" stroke-linejoin="round"/><path d="M6 12.2c4 .8 8 .8 12 0" stroke="#7f1d1d" stroke-width="1.2"/><path d="M9.5 12h5" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/></svg>' },
+            { id: 39, name: 'Olló',          svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9333ea" stroke-width="2.2"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.5 8.5L20 17M8.5 15.5L20 7" stroke-linecap="round"/></svg>' },
+            { id: 40, name: 'Koponya',       svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4.5 19.5L19.5 11.5M4.5 11.5l15 8" stroke="#0f172a" stroke-width="2.8" stroke-linecap="round"/><path d="M4.5 19.5L19.5 11.5M4.5 11.5l15 8" stroke="#fff" stroke-width="1.3" stroke-linecap="round"/><path d="M7.5 10a4.5 4.5 0 019 0c0 2-.8 3.2-1.5 3.8v2h-6v-2C8.3 13.2 7.5 12 7.5 10z" fill="#fff" stroke="#0f172a" stroke-width="1.5"/><circle cx="10" cy="10.2" r="1.4" fill="#0f172a"/><circle cx="14.2" cy="10.5" r="1" fill="#0f172a"/><path d="M10.5 15.8v-1.2M12 15.8v-1.2M13.5 15.8v-1.2" stroke="#0f172a" stroke-width="1"/></svg>' },
+            { id: 41, name: 'Hópehely',      svg: '<svg width="24" height="24" viewBox="0 0 24 24" stroke="#0284c7" stroke-width="2.2" stroke-linecap="round"><path d="M12 2v20M3.34 7l17.32 10M20.66 7L3.34 17"/><path d="M10 4.5l2 2 2-2M10 19.5l2-2 2 2M5 9.5l2.5-.5-.5-2.5M19 14.5l-2.5.5.5 2.5" stroke-width="1.5"/></svg>' },
+            { id: 42, name: 'Hóember',       svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M4.5 6l2 14" stroke="#0369a1" stroke-width="1.3" stroke-linecap="round"/><path d="M3 7l3-2.5M3.5 8.5l3-2.5" stroke="#38bdf8" stroke-width="1.2"/><circle cx="13" cy="16.2" r="4.8" fill="#f8fafc" stroke="#0284c7" stroke-width="1.5"/><circle cx="13" cy="9" r="3.4" fill="#f8fafc" stroke="#0284c7" stroke-width="1.5"/><path d="M9.5 6h7l-1-2.5h-5L9.5 6z" fill="#38bdf8" stroke="#0369a1" stroke-width="1"/><path d="M13 9.2l3.5.6-3.5.7z" fill="#f97316"/><circle cx="11.8" cy="8.2" r="0.7" fill="#0f172a"/><circle cx="14.2" cy="8.2" r="0.7" fill="#0f172a"/></svg>' },
+            { id: 43, name: 'Pók',           svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="#0f172a"><circle cx="12" cy="13" r="4"/><circle cx="12" cy="8" r="2.2"/><path d="M8 10L3 6M8 12.5H2M8 15l-5 4M16 10l5-4M16 12.5h6M16 15l5 4" stroke="#0f172a" stroke-width="1.8" stroke-linecap="round"/></svg>' },
+            { id: 44, name: 'Pókháló',       svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="1.5"><path d="M12 2v20M2 12h20M4.9 4.9l14.2 14.2M19.1 4.9L4.9 19.1"/><circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="8"/></svg>' },
+            { id: 45, name: 'Nap',           svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="5" fill="#facc15" stroke="#ca8a04" stroke-width="1.2"/><path d="M12 2v2.2m0 15.6V22M2 12h2.2m15.6 0H22m-3.2-14.8l-1.5 1.5M6.7 17.3l-1.5 1.5m0-13.6l1.5 1.5m10.6 10.6l1.5 1.5" stroke="#eab308" stroke-width="2.4" stroke-linecap="round"/></svg>' },
+            { id: 46, name: 'Napszemüveg',   svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="7" cy="13.5" r="4" fill="#0f172a"/><circle cx="17" cy="13.5" r="4" fill="#0f172a"/><path d="M11 13.5h2M3 13.5l2-6h2M21 13.5l-2-6h-2" stroke="#0f172a" stroke-width="2" stroke-linecap="round"/></svg>' },
+            { id: 47, name: 'Céltábla',      svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2.1"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3.8"/><circle cx="12" cy="12" r="1.4" fill="#dc2626"/><path d="M12 1.5v5.5M12 17v5.5M1.5 12H7M17 12h5.5" stroke-linecap="round"/></svg>' },
+            { id: 48, name: 'Teknős',        svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M5 15a7 7 0 0114 0H5z" fill="#16a34a" stroke="#14532d" stroke-width="1.2"/><circle cx="20" cy="13.5" r="2.2" fill="#4ade80" stroke="#14532d" stroke-width="1"/><path d="M7 15v3.5M17 15v3.5" stroke="#14532d" stroke-width="2.4" stroke-linecap="round"/></svg>' },
+            { id: 49, name: 'Violin kulcs',  svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M13 21c-2 0-3.2-1.5-2.5-3.2.6-1.2 2-1.2 2.5-.2M13 21V5.2c0-2-2.2-3.2-3.5-2-1.5 1.3-.2 3.8 1.8 5.2 2.2 1.5 4.2 3.2 4.2 5.8a4.2 4.2 0 01-8.4 0c0-2.4 2-4.2 4.4-4.2" stroke="#9a3412" stroke-width="3.2" stroke-linecap="round"/><path d="M13 21V5.2c0-2-2.2-3.2-3.5-2-1.5 1.3-.2 3.8 1.8 5.2 2.2 1.5 4.2 3.2 4.2 5.8a4.2 4.2 0 01-8.4 0c0-2.4 2-4.2 4.4-4.2" stroke="#f59e0b" stroke-width="1.8" stroke-linecap="round"/></svg>' },
+            { id: 50, name: 'Fa',            svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="10.5" y="15" width="3" height="7" fill="#78350f"/><circle cx="12" cy="10" r="6.5" fill="#16a34a" stroke="#14532d" stroke-width="1.2"/></svg>' },
+            { id: 51, name: 'Vízcsepp',      svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 2.5C12 2.5 5.5 10.5 5.5 15a6.5 6.5 0 0013 0c0-4.5-6.5-12.5-6.5-12.5z" fill="#0ea5e9" stroke="#0369a1" stroke-width="1.2"/><path d="M9 15.5a3 3 0 002 2.8" stroke="#e0f2fe" stroke-width="1.6" stroke-linecap="round"/></svg>' },
+            { id: 52, name: 'Kutya',         svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="13.5" rx="6" ry="5.5" fill="#facc15" stroke="#854d0e" stroke-width="1.2"/><path d="M6.5 9L4 14l3 1M17.5 9l2.5 5-3 1" fill="#ca8a04" stroke="#854d0e" stroke-width="1"/><circle cx="10" cy="12" r="1" fill="#0f172a"/><circle cx="14" cy="12" r="1" fill="#0f172a"/><ellipse cx="12" cy="15" rx="1.6" ry="1.1" fill="#0f172a"/></svg>' },
+            { id: 53, name: 'Jin és Jang',   svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" fill="#fff" stroke="#0f172a" stroke-width="1.8"/><path d="M12 3a9 9 0 000 18 4.5 4.5 0 010-9 4.5 4.5 0 000-9z" fill="#0f172a"/><circle cx="12" cy="7.5" r="1.4" fill="#fff"/><circle cx="12" cy="16.5" r="1.4" fill="#0f172a"/></svg>' },
+            { id: 54, name: 'Zebra',         svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><ellipse cx="12" cy="13" rx="6" ry="7" fill="#fff" stroke="#0f172a" stroke-width="1.8"/><path d="M7.5 9.5l9 2M7 13.5l10 2M8.5 17.5l7 1" stroke="#0f172a" stroke-width="2"/><path d="M8 6l1.5-2.5M16 6l-1.5-2.5" stroke="#0f172a" stroke-width="2" stroke-linecap="round"/></svg>' },
+            { id: 55, name: 'Kérdőjel',      svg: '<svg width="24" height="24" viewBox="0 0 24 24"><text x="12" y="19.5" text-anchor="middle" font-size="21" font-weight="900" fill="#16a34a" stroke="#14532d" stroke-width="0.6">?</text></svg>' },
+            { id: 56, name: 'Sajt',          svg: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M3 11l14-6 4 6v8H3v-8z" fill="#facc15" stroke="#a16207" stroke-width="1.2" stroke-linejoin="round"/><circle cx="8" cy="15" r="1.5" fill="#ca8a04"/><circle cx="14" cy="13" r="1.5" fill="#ca8a04"/><circle cx="16" cy="16.5" r="1.2" fill="#ca8a04"/></svg>' }
+        ];
+
+        const LINE_COLORS = ['#ef4444', '#f97316', '#eab308', '#16a34a', '#06b6d4', '#2563eb', '#9333ea'];
+        const INV_MOD7 = [0, 1, 4, 5, 2, 3, 6]; // modular multiplicative inverses mod 7
+
+        // =====================================================================
+        // 2. GAME STATE
+        // =====================================================================
+        let gridState = Array.from({ length: 7 }, () => new Array(7).fill(null));
+        let idealState = new Array(8).fill(null);
+
+        let searchQuery = '';
+        let paletteFilter = 'all';       // 'all' | 'unplaced'
+        let selectedPaletteSymId = null; // chosen from search list to click-place
+        let locateFlashSymId = null;     // flashes symbol on the board when clicked in palette
+
+        let cardPick = [];               // up to 2 clicked board positions { kind, r, c, idealIdx, symId }
+        let generatedCard = null;        // { lineLabel, idealIdx, slots: [{kind,r,c,idealIdx,symId}], gridPts: [{r,c}], allIdeals: bool }
+        let activeIdealHighlight = null; // 0..7 when user clicks a single ideal point to see its 7 parallel lines
+        let undoStack = [];
+
+        function pushUndo() {
+            undoStack.push({
+                gridState: gridState.map(row => [...row]),
+                idealState: [...idealState],
+                cardPick: cardPick.map(p => ({ ...p })),
+                generatedCard: generatedCard ? {
+                    ...generatedCard,
+                    slots: generatedCard.slots.map(s => ({ ...s })),
+                    gridPts: generatedCard.gridPts.map(p => ({ ...p }))
+                } : null,
+                selectedPaletteSymId,
+                activeIdealHighlight
+            });
+            if (undoStack.length > 80) undoStack.shift();
+        }
+
+        function undoLastAction() {
+            if (undoStack.length === 0) return;
+            const prev = undoStack.pop();
+            gridState = prev.gridState;
+            idealState = prev.idealState;
+            cardPick = prev.cardPick;
+            generatedCard = prev.generatedCard;
+            selectedPaletteSymId = prev.selectedPaletteSymId;
+            activeIdealHighlight = prev.activeIdealHighlight;
+            setStatusBanner('warn', 'Utolsó lépés visszavonva.');
+            updateAll();
+        }
+
+        // =====================================================================
+        // 3. INITIALIZATION (START WITH COMPLETE GRID)
+        // =====================================================================
+        window.addEventListener('DOMContentLoaded', () => {
+            buildCompleteInitialGrid(false);
+        });
+
+        function buildCompleteInitialGrid(recordUndo = true) {
+            if (recordUndo) pushUndo();
+            gridState = Array.from({ length: 7 }, () => new Array(7).fill(null));
+            idealState = new Array(8).fill(null);
+
+            const findCard = (s1, s2) => PG27_CARDS.find(c => c.includes(s1) && c.includes(s2));
+            const cA = PG27_CARDS[0]; // L0 through Snowman(42)
+            const cB = PG27_CARDS[8]; // Row 0 grid card through Lips(38)
+            const H = cA.find(s => cB.includes(s));
+
+            idealState[0] = H;
+            const remA = cA.filter(s => s !== H);
+            const remB = cB.filter(s => s !== H);
+            for (let c = 0; c < 7; c++) {
+                gridState[0][c] = remA[c];
+                gridState[1][c] = remB[c];
+            }
+
+            const cardRow0 = cA;
+            const cardRow1 = cB;
+            const col1 = findCard(gridState[0][0], gridState[1][0]);
+            const col2 = findCard(gridState[0][1], gridState[1][1]);
+            const V = col1.find(s => col2.includes(s));
+            idealState[1] = V;
+
+            const O = gridState[0][0];
+            const Ex = gridState[0][1];
+            const col0Card = findCard(O, V);
+            const Ey = col0Card.find(s => s !== O && s !== V && cardRow1.includes(s));
+            const col1Card = findCard(Ex, V);
+            const diag11 = col1Card.find(s => s !== Ex && s !== V && cardRow1.includes(s));
+
+            const infLine = findCard(H, V);
+            const slope1Line = findCard(O, diag11);
+            const I1 = slope1Line.find(s => infLine.includes(s));
+
+            const row0Ordered = [O, Ex];
+            for (let k = 1; k < 6; k++) {
+                const lSlope = findCard(row0Ordered[k], I1);
+                const nextInRow1 = lSlope.find(s => s !== I1 && cardRow1.includes(s));
+                const lVert = findCard(nextInRow1, V);
+                row0Ordered.push(lVert.find(s => s !== V && cardRow0.includes(s)));
+            }
+
+            const col0Ordered = [O, Ey];
+            for (let k = 1; k < 6; k++) {
+                const lSlope = findCard(col0Ordered[k], I1);
+                const nextInCol1 = lSlope.find(s => s !== I1 && col1Card.includes(s));
+                const lHoriz = findCard(nextInCol1, H);
+                col0Ordered.push(lHoriz.find(s => s !== H && col0Card.includes(s)));
+            }
+
+            const rowCards = col0Ordered.map(sym => findCard(sym, H));
+            const colCards = row0Ordered.map(sym => findCard(sym, V));
+            for (let r = 0; r < 7; r++) {
+                for (let c = 0; c < 7; c++) {
+                    gridState[r][c] = rowCards[r].find(s => colCards[c].includes(s));
+                }
+            }
+
+            for (let m = 1; m <= 6; m++) {
+                const l = findCard(O, gridState[m][1]);
+                idealState[1 + m] = l.find(s => infLine.includes(s));
+            }
+
+            cardPick = [];
+            generatedCard = null;
+            activeIdealHighlight = null;
+            selectedPaletteSymId = null;
+            if (!recordUndo) undoStack = [];
+            setStatusBanner(null);
+            updateAll();
+        }
+
+        function resetToCompleteGrid() {
+            buildCompleteInitialGrid(true);
+            setStatusBanner('success', 'Teljes 7×7 + 8 pontos kezdőrács betöltve.');
+        }
+
+        function clearBoardToEmpty() {
+            pushUndo();
+            gridState = Array.from({ length: 7 }, () => new Array(7).fill(null));
+            idealState = new Array(8).fill(null);
+            cardPick = [];
+            generatedCard = null;
+            activeIdealHighlight = null;
+            setStatusBanner('warn', 'Rács kiürítve! Keresd ki és húzd a szimbólumokat a mezőkre.');
+            updateAll();
+        }
+
+        function isSymbolOnBoard(symId) {
+            if (idealState.includes(symId)) return true;
+            for (let r = 0; r < 7; r++) {
+                for (let c = 0; c < 7; c++) {
+                    if (gridState[r][c] === symId) return true;
+                }
+            }
+            return false;
+        }
+
+        function findSymbolLocation(symId) {
+            for (let i = 0; i < 8; i++) {
+                if (idealState[i] === symId) return { kind: 'ideal', r: -1, c: -1, idealIdx: i };
+            }
+            for (let r = 0; r < 7; r++) {
+                for (let c = 0; c < 7; c++) {
+                    if (gridState[r][c] === symId) return { kind: 'grid', r, c, idealIdx: -1 };
+                }
+            }
+            return null;
+        }
+
+        // =====================================================================
+        // 4. SEARCH BAR & PALETTE INTERACTION
+        // =====================================================================
+        function normalizeText(str) {
+            return (str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        }
+
+        function handleSearchInput(val) {
+            searchQuery = val;
+            const clearBtn = document.getElementById('btn-clear-search');
+            if (val.trim().length > 0) clearBtn.classList.remove('hidden');
+            else clearBtn.classList.add('hidden');
+            renderPalette();
+        }
+
+        function clearSearchQuery() {
+            const inp = document.getElementById('symbol-search-input');
+            inp.value = '';
+            handleSearchInput('');
+            inp.focus();
+        }
+
+        function setPaletteFilter(filterMode) {
+            paletteFilter = filterMode;
+            const allBtn = document.getElementById('filter-all-btn');
+            const unpBtn = document.getElementById('filter-unplaced-btn');
+            if (filterMode === 'all') {
+                allBtn.className = 'px-2 py-0.5 rounded-md font-semibold bg-slate-800 text-white transition';
+                unpBtn.className = 'px-2 py-0.5 rounded-md font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition';
+            } else {
+                unpBtn.className = 'px-2 py-0.5 rounded-md font-semibold bg-slate-800 text-white transition';
+                allBtn.className = 'px-2 py-0.5 rounded-md font-semibold bg-slate-100 text-slate-600 hover:bg-slate-200 transition';
+            }
+            renderPalette();
+        }
+
+        function handlePaletteItemClick(symId) {
+            if (isSymbolOnBoard(symId)) {
+                selectedPaletteSymId = null;
+                locateFlashSymId = symId;
+                renderPalette();
+                renderPalettePickBar();
+                renderGrid();
+                renderIdeals();
+                setStatusBanner('warn', `A(z) „${SYMBOLS[symId].name}” itt található a táblán (áthelyezéshez húzd a rácson).`);
+                setTimeout(() => {
+                    if (locateFlashSymId === symId) {
+                        locateFlashSymId = null;
+                        renderGrid();
+                        renderIdeals();
+                    }
+                }, 1600);
+                return;
+            }
+            selectedPaletteSymId = selectedPaletteSymId === symId ? null : symId;
+            renderPalette();
+            renderPalettePickBar();
+        }
+
+        function clearSelectedPaletteSymbol() {
+            selectedPaletteSymId = null;
+            renderPalette();
+            renderPalettePickBar();
+        }
+
+        // =====================================================================
+        // 5. CARD GENERATION DIRECTLY FROM GRID GEOMETRY
+        // =====================================================================
+        function getIdealName(idealIdx) {
+            if (idealIdx === 0) return 'Vízszintes (H)';
+            if (idealIdx === 1) return 'Függőleges (V)';
+            return `Ideális ${idealIdx - 1}`;
+        }
+
+        function generateLineSlotsFromTwoPicks(p1, p2) {
+            const slots = [];
+            const gridPts = [];
+
+            // Case 1: Both points are ideal points -> the 8-ideal line at infinity
+            if (p1.kind === 'ideal' && p2.kind === 'ideal') {
+                for (let i = 0; i < 8; i++) {
+                    slots.push({ kind: 'ideal', r: -1, c: -1, idealIdx: i, symId: idealState[i] });
+                }
+                return {
+                    lineLabel: 'Mind a 8 ideális pont (végtelen távoli egyenes)',
+                    idealIdx: null,
+                    allIdeals: true,
+                    slots,
+                    gridPts
+                };
+            }
+
+            // Case 2: At least one grid point
+            const gPt = p1.kind === 'grid' ? p1 : p2;
+            const other = p1.kind === 'grid' ? p2 : p1;
+
+            if (other.kind === 'ideal') {
+                const iIdx = other.idealIdx;
+                if (iIdx === 0) {
+                    // Horizontal row gPt.r + H
+                    for (let c = 0; c < 7; c++) {
+                        slots.push({ kind: 'grid', r: gPt.r, c, idealIdx: -1, symId: gridState[gPt.r][c] });
+                        gridPts.push({ r: gPt.r, c });
+                    }
+                    slots.push({ kind: 'ideal', r: -1, c: -1, idealIdx: 0, symId: idealState[0] });
+                    return { lineLabel: `${gPt.r + 1}. sor + Vízszintes (H)`, idealIdx: 0, allIdeals: false, slots, gridPts };
+                }
+                if (iIdx === 1) {
+                    // Vertical col gPt.c + V
+                    for (let r = 0; r < 7; r++) {
+                        slots.push({ kind: 'grid', r, c: gPt.c, idealIdx: -1, symId: gridState[r][gPt.c] });
+                        gridPts.push({ r, c: gPt.c });
+                    }
+                    slots.push({ kind: 'ideal', r: -1, c: -1, idealIdx: 1, symId: idealState[1] });
+                    return { lineLabel: `${gPt.c + 1}. oszlop + Függőleges (V)`, idealIdx: 1, allIdeals: false, slots, gridPts };
+                }
+                // Affine slope s = iIdx - 1 in 1..6 passing through (gPt.r, gPt.c)
+                const s = iIdx - 1;
+                for (let c = 0; c < 7; c++) {
+                    const r = (((gPt.r + s * (c - gPt.c)) % 7) + 7) % 7;
+                    slots.push({ kind: 'grid', r, c, idealIdx: -1, symId: gridState[r][c] });
+                    gridPts.push({ r, c });
+                }
+                slots.push({ kind: 'ideal', r: -1, c: -1, idealIdx: iIdx, symId: idealState[iIdx] });
+                return { lineLabel: `Átlós egyenes (${getIdealName(iIdx)})`, idealIdx: iIdx, allIdeals: false, slots, gridPts };
+            }
+
+            // Case 3: Both p1 and p2 are grid points
+            if (p1.r === p2.r) {
+                for (let c = 0; c < 7; c++) {
+                    slots.push({ kind: 'grid', r: p1.r, c, idealIdx: -1, symId: gridState[p1.r][c] });
+                    gridPts.push({ r: p1.r, c });
+                }
+                slots.push({ kind: 'ideal', r: -1, c: -1, idealIdx: 0, symId: idealState[0] });
+                return { lineLabel: `${p1.r + 1}. sor + Vízszintes (H)`, idealIdx: 0, allIdeals: false, slots, gridPts };
+            }
+
+            if (p1.c === p2.c) {
+                for (let r = 0; r < 7; r++) {
+                    slots.push({ kind: 'grid', r, c: p1.c, idealIdx: -1, symId: gridState[r][p1.c] });
+                    gridPts.push({ r, c: p1.c });
+                }
+                slots.push({ kind: 'ideal', r: -1, c: -1, idealIdx: 1, symId: idealState[1] });
+                return { lineLabel: `${p1.c + 1}. oszlop + Függőleges (V)`, idealIdx: 1, allIdeals: false, slots, gridPts };
+            }
+
+            const dr = (((p2.r - p1.r) % 7) + 7) % 7;
+            const dc = (((p2.c - p1.c) % 7) + 7) % 7;
+            const s = (dr * INV_MOD7[dc]) % 7; // 1..6
+            const idealIdx = 1 + s;
+            for (let c = 0; c < 7; c++) {
+                const r = (((p1.r + s * (c - p1.c)) % 7) + 7) % 7;
+                slots.push({ kind: 'grid', r, c, idealIdx: -1, symId: gridState[r][c] });
+                gridPts.push({ r, c });
+            }
+            slots.push({ kind: 'ideal', r: -1, c: -1, idealIdx, symId: idealState[idealIdx] });
+            return { lineLabel: `Átlós egyenes (${getIdealName(idealIdx)})`, idealIdx, allIdeals: false, slots, gridPts };
+        }
+
+        function refreshGeneratedCardIfValid() {
+            if (cardPick.length === 2) {
+                // Re-sync symId from current grid in case of reorder/swap
+                const syncPick = (p) => ({
+                    ...p,
+                    symId: p.kind === 'grid' ? gridState[p.r][p.c] : idealState[p.idealIdx]
+                });
+                const p1 = syncPick(cardPick[0]);
+                const p2 = syncPick(cardPick[1]);
+                if (p1.symId !== null && p2.symId !== null && !(p1.kind === p2.kind && p1.r === p2.r && p1.c === p2.c && p1.idealIdx === p2.idealIdx)) {
+                    cardPick = [p1, p2];
+                    generatedCard = generateLineSlotsFromTwoPicks(p1, p2);
+                } else {
+                    cardPick = [];
+                    generatedCard = null;
+                }
+            }
+        }
+
+        function clearCardSelection() {
+            cardPick = [];
+            generatedCard = null;
+            activeIdealHighlight = null;
+            setStatusBanner(null);
+            updateAll();
+        }
+
+        // =====================================================================
+        // 6. BOARD INTERACTION & DRAG-AND-DROP
+        // =====================================================================
+        function handleBoardSlotClick(kind, r, c, idealIdx) {
+            const currentSym = kind === 'grid' ? gridState[r][c] : idealState[idealIdx];
+
+            // Placing a selected symbol from the search bar
+            if (selectedPaletteSymId !== null) {
+                if (currentSym !== null) {
+                    setStatusBanner('warn', 'Ez a mező már foglalt! Üres mezőre kattints, vagy húzd a jelet át a meglévőre.');
+                    return;
+                }
+                pushUndo();
+                if (kind === 'grid') gridState[r][c] = selectedPaletteSymId;
+                else idealState[idealIdx] = selectedPaletteSymId;
+
+                const placedName = SYMBOLS[selectedPaletteSymId].name;
+                selectedPaletteSymId = null;
+                refreshGeneratedCardIfValid();
+                setStatusBanner('success', `A(z) „${placedName}” elhelyezve.`);
+                updateAll();
+                return;
+            }
+
+            if (currentSym === null) return;
+
+            // If we already had a generated card from 2 picks, starting a fresh click resets to [this]
+            if (cardPick.length >= 2) {
+                cardPick = [];
+                generatedCard = null;
+            }
+
+            const sameSlotIdx = cardPick.findIndex(p => p.kind === kind && p.r === r && p.c === c && p.idealIdx === idealIdx);
+            if (sameSlotIdx !== -1) {
+                cardPick.splice(sameSlotIdx, 1);
+                activeIdealHighlight = (cardPick.length === 1 && cardPick[0].kind === 'ideal') ? cardPick[0].idealIdx : null;
+                generatedCard = null;
+                setStatusBanner(null);
+                updateAll();
+                return;
+            }
+
+            cardPick.push({ kind, r, c, idealIdx, symId: currentSym });
+
+            if (cardPick.length === 1) {
+                if (kind === 'ideal') {
+                    activeIdealHighlight = idealIdx;
+                    setStatusBanner('success', `${getIdealName(idealIdx)} (${SYMBOLS[currentSym].name}) 7 párhuzamos egyenese látható. Kattints egy 2. jelre a kártya generálásához!`);
+                } else {
+                    activeIdealHighlight = null;
+                    setStatusBanner(null);
+                }
+            } else if (cardPick.length === 2) {
+                activeIdealHighlight = null;
+                generatedCard = generateLineSlotsFromTwoPicks(cardPick[0], cardPick[1]);
+                const filledCnt = generatedCard.slots.filter(s => s.symId !== null).length;
+                if (filledCnt === 8) {
+                    setStatusBanner('success', `Kártya legenerálva a rácsból: ${generatedCard.lineLabel} (8/8 szimbólum).`);
+                } else {
+                    setStatusBanner('warn', `Kártya legenerálva a rácsból: ${generatedCard.lineLabel} (${filledCnt}/8 szimbólum van még lerakva ezen az egyenesen).`);
+                }
+            }
+            updateAll();
+        }
+
+        function swapBoardPositions(a, b) {
+            const symA = a.kind === 'grid' ? gridState[a.r][a.c] : idealState[a.idealIdx];
+            const symB = b.kind === 'grid' ? gridState[b.r][b.c] : idealState[b.idealIdx];
+            if (a.kind === 'grid') gridState[a.r][a.c] = symB;
+            else idealState[a.idealIdx] = symB;
+            if (b.kind === 'grid') gridState[b.r][b.c] = symA;
+            else idealState[b.idealIdx] = symA;
+        }
+
+        function moveRow(r, delta) {
+            const target = r + delta;
+            if (target < 0 || target >= 7) return;
+            moveRowTo(r, target);
+        }
+
+        function moveCol(c, delta) {
+            const target = c + delta;
+            if (target < 0 || target >= 7) return;
+            moveColTo(c, target);
+        }
+
+        function moveRowTo(srcR, dstR) {
+            if (srcR === dstR || srcR < 0 || dstR < 0 || srcR >= 7 || dstR >= 7) return;
+            pushUndo();
+            const [row] = gridState.splice(srcR, 1);
+            gridState.splice(dstR, 0, row);
+            refreshGeneratedCardIfValid();
+            updateAll();
+        }
+
+        function moveColTo(srcC, dstC) {
+            if (srcC === dstC || srcC < 0 || dstC < 0 || srcC >= 7 || dstC >= 7) return;
+            pushUndo();
+            for (let r = 0; r < 7; r++) {
+                const [val] = gridState[r].splice(srcC, 1);
+                gridState[r].splice(dstC, 0, val);
+            }
+            refreshGeneratedCardIfValid();
+            updateAll();
+        }
+
+        function handleDragStartBoard(e, kind, r, c, idealIdx) {
+            const sym = kind === 'grid' ? gridState[r][c] : idealState[idealIdx];
+            if (sym === null) {
+                e.preventDefault();
+                return;
+            }
+            e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'swap', kind, r, c, idealIdx }));
+        }
+
+        function handleDragStartPaletteSym(e, symId) {
+            e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'palette-place', symId }));
+        }
+
+        function handleDropOnSlot(e, kind, r, c, idealIdx) {
+            e.preventDefault();
+            let payload;
+            try {
+                payload = JSON.parse(e.dataTransfer.getData('text/plain'));
+            } catch (_) {
+                return;
+            }
+            if (!payload) return;
+
+            if (payload.type === 'palette-place') {
+                const existingLoc = findSymbolLocation(payload.symId);
+                pushUndo();
+                if (existingLoc) {
+                    // Move/swap from its previous spot on the board cleanly
+                    swapBoardPositions(existingLoc, { kind, r, c, idealIdx });
+                } else {
+                    // Place from palette (if slot already had a symbol, that symbol returns to unplaced palette)
+                    if (kind === 'grid') gridState[r][c] = payload.symId;
+                    else idealState[idealIdx] = payload.symId;
+                }
+                selectedPaletteSymId = null;
+                refreshGeneratedCardIfValid();
+                setStatusBanner('success', `A(z) „${SYMBOLS[payload.symId].name}” elhelyezve.`);
+                updateAll();
+            } else if (payload.type === 'swap') {
+                if (payload.kind === kind && payload.r === r && payload.c === c && payload.idealIdx === idealIdx) return;
+                pushUndo();
+                swapBoardPositions(
+                    { kind: payload.kind, r: payload.r, c: payload.c, idealIdx: payload.idealIdx },
+                    { kind, r, c, idealIdx }
+                );
+                refreshGeneratedCardIfValid();
+                updateAll();
+            }
+        }
+
+        function clearSlotSymbol(e, kind, r, c, idealIdx) {
+            e.stopPropagation();
+            pushUndo();
+            if (kind === 'grid') gridState[r][c] = null;
+            else idealState[idealIdx] = null;
+            cardPick = [];
+            generatedCard = null;
+            activeIdealHighlight = null;
+            updateAll();
+        }
+
+        function checkCompletedPlane() {
+            let gridFilled = 0, idealFilled = 0;
+            const seen = new Set();
+            for (let r = 0; r < 7; r++) {
+                for (let c = 0; c < 7; c++) {
+                    if (gridState[r][c] !== null) {
+                        gridFilled++;
+                        seen.add(gridState[r][c]);
+                    }
+                }
+            }
+            for (let i = 0; i < 8; i++) {
+                if (idealState[i] !== null) {
+                    idealFilled++;
+                    seen.add(idealState[i]);
+                }
+            }
+
+            if (gridFilled < 49 || idealFilled < 8) {
+                setStatusBanner('warn', `Még nincs kész a teljes tábla! (Rács: ${gridFilled}/49, Ideális pontok: ${idealFilled}/8)`);
+                return;
+            }
+            if (seen.size !== 57) {
+                setStatusBanner('error', 'Valamelyik szimbólum többször szerepel! Mind az 57-nek pontosan egyszer kell megjelennie.');
+                return;
+            }
+
+            confetti({ particleCount: 140, spread: 90, origin: { y: 0.6 } });
+            setStatusBanner('success', '🎉 Mind az 57 szimbólum a helyén! Kattints bármely 2 szimbólumra a rácsból generált Dobble kártyájukhoz!');
+        }
+
+        // Compute the 7 geometric parallel lines on the 7x7 grid for idealIdx (0..7)
+        function getParallelLinesForIdeal(idealIdx) {
+            if (idealIdx === null || idealIdx < 0 || idealIdx > 7) return [];
+            const lines = [];
+
+            if (idealIdx === 0) {
+                for (let r = 0; r < 7; r++) {
+                    const pts = [];
+                    for (let c = 0; c < 7; c++) pts.push({ r, c });
+                    lines.push({ color: LINE_COLORS[r], pts });
+                }
+                return lines;
+            }
+            if (idealIdx === 1) {
+                for (let c = 0; c < 7; c++) {
+                    const pts = [];
+                    for (let r = 0; r < 7; r++) pts.push({ r, c });
+                    lines.push({ color: LINE_COLORS[c], pts });
+                }
+                return lines;
+            }
+
+            const s = idealIdx - 1; // slope 1..6 in (r, c)
+            for (let b = 0; b < 7; b++) {
+                const pts = [];
+                for (let c = 0; c < 7; c++) {
+                    const r = (b + s * c) % 7;
+                    pts.push({ r, c });
+                }
+                lines.push({ color: LINE_COLORS[b], pts });
+            }
+            return lines;
+        }
+
+        // =====================================================================
+        // 7. RENDERING
+        // =====================================================================
+        function setStatusBanner(type, text = '') {
+            const el = document.getElementById('board-status-banner');
+            if (!type) {
+                el.className = 'hidden';
+                el.textContent = '';
+                return;
+            }
+            el.textContent = text;
+            if (type === 'success') {
+                el.className = 'w-full mt-2 px-3 py-2 rounded-xl border text-xs font-semibold text-center bg-emerald-50 border-emerald-300 text-emerald-800';
+            } else if (type === 'error') {
+                el.className = 'w-full mt-2 px-3 py-2 rounded-xl border text-xs font-semibold text-center bg-rose-50 border-rose-300 text-rose-800';
+            } else {
+                el.className = 'w-full mt-2 px-3 py-2 rounded-xl border text-xs font-semibold text-center bg-amber-50 border-amber-300 text-amber-800';
+            }
+        }
+
+        function updateAll() {
+            renderHeaderAndBadges();
+            renderColRowControls();
+            renderGrid();
+            renderGridLinesOverlay();
+            renderIdeals();
+            renderPalette();
+            renderPalettePickBar();
+            renderGeneratedCardPanel();
+        }
+
+        function renderHeaderAndBadges() {
+            let gridCnt = 0;
+            for (let r = 0; r < 7; r++) for (let c = 0; c < 7; c++) if (gridState[r][c] !== null) gridCnt++;
+            const idealCnt = idealState.filter(x => x !== null).length;
+
+            document.getElementById('grid-count-badge').textContent = `${gridCnt} / 49`;
+            document.getElementById('ideal-count-badge').textContent = `${idealCnt} / 8`;
+            document.getElementById('unplaced-count').textContent = `${57 - (gridCnt + idealCnt)}`;
+
+            const undoBtn = document.getElementById('btn-undo');
+            if (undoBtn) undoBtn.disabled = undoStack.length === 0;
+
+            const badge = document.getElementById('status-badge');
+            if (gridCnt === 49 && idealCnt === 8) {
+                badge.className = 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200';
+                badge.textContent = 'Teljes (49 + 8)';
+            } else {
+                badge.className = 'text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200';
+                badge.textContent = `Építés (${gridCnt + idealCnt} / 57)`;
+            }
+        }
+
+        function renderColRowControls() {
+            const colRow = document.getElementById('col-controls-row');
+            colRow.innerHTML = '<div class="col-span-1"></div>';
+            for (let c = 0; c < 7; c++) {
+                const wrap = document.createElement('div');
+                wrap.draggable = true;
+                wrap.title = `Húzd a(z) ${c + 1}. oszlopot másik helyre`;
+                wrap.className = 'flex items-center justify-center gap-0.5 py-0.5 rounded-lg bg-slate-100/80 border border-slate-200 cursor-grab active:cursor-grabbing hover:bg-indigo-50 hover:border-indigo-300 transition select-none';
+                wrap.ondragstart = (e) => {
+                    e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'col-drag', index: c }));
+                    wrap.classList.add('opacity-50');
+                };
+                wrap.ondragend = () => wrap.classList.remove('opacity-50');
+                wrap.ondragover = (e) => {
+                    e.preventDefault();
+                    wrap.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-100');
+                };
+                wrap.ondragleave = () => wrap.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-100');
+                wrap.ondrop = (e) => {
+                    e.preventDefault();
+                    wrap.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-100');
+                    try {
+                        const p = JSON.parse(e.dataTransfer.getData('text/plain'));
+                        if (p && p.type === 'col-drag') moveColTo(p.index, c);
+                    } catch (_) {}
+                };
+                wrap.innerHTML = `
+                    <button onclick="event.stopPropagation(); moveCol(${c}, -1)" ${c === 0 ? 'disabled' : ''} title="Oszlop balra" class="w-4 h-5 rounded hover:bg-white disabled:opacity-30 text-[9px] font-bold text-slate-600 flex items-center justify-center">◄</button>
+                    <span class="text-[10px] font-bold text-slate-600 px-0.5">⋮${c + 1}</span>
+                    <button onclick="event.stopPropagation(); moveCol(${c}, 1)" ${c === 6 ? 'disabled' : ''} title="Oszlop jobbra" class="w-4 h-5 rounded hover:bg-white disabled:opacity-30 text-[9px] font-bold text-slate-600 flex items-center justify-center">►</button>
+                `;
+                colRow.appendChild(wrap);
+            }
+            colRow.insertAdjacentHTML('beforeend', '<div class="col-span-1"></div>');
+
+            const rowCol = document.getElementById('row-controls-col');
+            rowCol.innerHTML = '';
+            for (let r = 0; r < 7; r++) {
+                const wrap = document.createElement('div');
+                wrap.draggable = true;
+                wrap.title = `Húzd a(z) ${r + 1}. sort másik helyre`;
+                wrap.className = 'h-12 sm:h-14 flex items-center justify-end gap-0.5 px-1 rounded-lg bg-slate-100/80 border border-slate-200 cursor-grab active:cursor-grabbing hover:bg-indigo-50 hover:border-indigo-300 transition select-none';
+                wrap.ondragstart = (e) => {
+                    e.dataTransfer.setData('text/plain', JSON.stringify({ type: 'row-drag', index: r }));
+                    wrap.classList.add('opacity-50');
+                };
+                wrap.ondragend = () => wrap.classList.remove('opacity-50');
+                wrap.ondragover = (e) => {
+                    e.preventDefault();
+                    wrap.classList.add('ring-2', 'ring-indigo-500', 'bg-indigo-100');
+                };
+                wrap.ondragleave = () => wrap.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-100');
+                wrap.ondrop = (e) => {
+                    e.preventDefault();
+                    wrap.classList.remove('ring-2', 'ring-indigo-500', 'bg-indigo-100');
+                    try {
+                        const p = JSON.parse(e.dataTransfer.getData('text/plain'));
+                        if (p && p.type === 'row-drag') moveRowTo(p.index, r);
+                    } catch (_) {}
+                };
+                wrap.innerHTML = `
+                    <span class="text-[10px] font-bold text-slate-600 mr-0.5">⠿${r + 1}</span>
+                    <div class="flex flex-col gap-0.5">
+                        <button onclick="event.stopPropagation(); moveRow(${r}, -1)" ${r === 0 ? 'disabled' : ''} title="Sor fel" class="w-4 h-4 rounded hover:bg-white disabled:opacity-30 text-[8px] font-bold text-slate-600 flex items-center justify-center">▲</button>
+                        <button onclick="event.stopPropagation(); moveRow(${r}, 1)" ${r === 6 ? 'disabled' : ''} title="Sor le" class="w-4 h-4 rounded hover:bg-white disabled:opacity-30 text-[8px] font-bold text-slate-600 flex items-center justify-center">▼</button>
+                    </div>
+                `;
+                rowCol.appendChild(wrap);
+            }
+        }
+
+        function createSlotElement(kind, r, c, idealIdx, symId, cellHighlightColor = null) {
+            const isGrid = kind === 'grid';
+            const el = document.createElement('div');
+
+            const isPicked = cardPick.some(p => p.kind === kind && p.r === r && p.c === c && p.idealIdx === idealIdx);
+            const isOnGeneratedLine = generatedCard && generatedCard.slots.some(s => s.kind === kind && s.r === r && s.c === c && s.idealIdx === idealIdx);
+            const isIdealActive = !isGrid && activeIdealHighlight === idealIdx;
+            const isFlashed = symId !== null && locateFlashSymId === symId;
+
+            let baseCls = isGrid
+                ? 'grid-cell h-12 sm:h-14 rounded-xl border-2 flex items-center justify-center relative cursor-pointer '
+                : 'ideal-cell w-12 h-12 sm:w-14 sm:h-14 rounded-full border-2 flex items-center justify-center relative cursor-pointer ';
+
+            if (symId !== null) {
+                baseCls += isGrid
+                    ? 'bg-white border-slate-200 shadow-2xs '
+                    : (idealIdx === 0 ? 'bg-sky-50 border-sky-400 shadow-xs ' : (idealIdx === 1 ? 'bg-purple-50 border-purple-400 shadow-xs ' : 'bg-indigo-50 border-indigo-300 shadow-xs '));
+            } else {
+                baseCls += isGrid
+                    ? 'bg-white/70 border-dashed border-slate-300 '
+                    : (idealIdx === 0 ? 'bg-sky-50/40 border-dashed border-sky-300 ' : (idealIdx === 1 ? 'bg-purple-50/40 border-dashed border-purple-300 ' : 'bg-indigo-50/40 border-dashed border-indigo-300 '));
+            }
+
+            if (isOnGeneratedLine && !isPicked) baseCls += 'cell-line-highlight ';
+            if (isPicked) baseCls += 'cell-lookup-selected ';
+            if (isIdealActive) baseCls += 'ideal-active-highlight ';
+            if (isFlashed) baseCls += 'cell-locate-flash ';
+
+            el.className = baseCls;
+            if (cellHighlightColor && !isPicked && !isOnGeneratedLine) {
+                el.style.borderColor = cellHighlightColor;
+                el.style.boxShadow = `inset 0 0 0 2px ${cellHighlightColor}33`;
+            }
+
+            el.onclick = () => handleBoardSlotClick(kind, r, c, idealIdx);
+            el.ondragover = (e) => {
+                e.preventDefault();
+                el.classList.add('ring-2', 'ring-amber-400');
+            };
+            el.ondragleave = () => el.classList.remove('ring-2', 'ring-amber-400');
+            el.ondrop = (e) => {
+                el.classList.remove('ring-2', 'ring-amber-400');
+                handleDropOnSlot(e, kind, r, c, idealIdx);
+            };
+
+            if (symId !== null) {
+                const sym = SYMBOLS[symId];
+                el.setAttribute('draggable', 'true');
+                el.ondragstart = (e) => handleDragStartBoard(e, kind, r, c, idealIdx);
+                el.title = sym.name;
+                el.innerHTML = `<span class="w-7 h-7 sm:w-8 sm:h-8 icon-fit pointer-events-none">${sym.svg}</span>`;
+
+                const rm = document.createElement('button');
+                rm.type = 'button';
+                rm.title = 'Eltávolítás a mezőről';
+                rm.className = 'absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-slate-200 hover:bg-rose-500 text-slate-600 hover:text-white text-[9px] font-bold flex items-center justify-center opacity-0 transition';
+                rm.textContent = '×';
+                rm.onclick = (e) => clearSlotSymbol(e, kind, r, c, idealIdx);
+                el.onmouseenter = () => rm.classList.add('opacity-100');
+                el.onmouseleave = () => rm.classList.remove('opacity-100');
+                el.appendChild(rm);
+            } else if (!isGrid && idealIdx === 0) {
+                el.innerHTML = '<span class="text-xs font-bold text-sky-400">H</span>';
+            } else if (!isGrid && idealIdx === 1) {
+                el.innerHTML = '<span class="text-xs font-bold text-purple-400">V</span>';
+            }
+
+            return el;
+        }
+
+        function renderGrid() {
+            const container = document.getElementById('grid-container');
+            container.innerHTML = '';
+
+            const cellColorMap = {};
+            if (activeIdealHighlight !== null) {
+                const parallelLines = getParallelLinesForIdeal(activeIdealHighlight);
+                parallelLines.forEach(line => {
+                    line.pts.forEach(p => {
+                        cellColorMap[`${p.r},${p.c}`] = line.color;
+                    });
+                });
+            }
+
+            for (let r = 0; r < 7; r++) {
+                for (let c = 0; c < 7; c++) {
+                    const col = cellColorMap[`${r},${c}`] || null;
+                    container.appendChild(createSlotElement('grid', r, c, -1, gridState[r][c], col));
+                }
+            }
+        }
+
+        function detectDominantStep(parallelLines) {
+            const counts = new Map();
+            parallelLines.forEach(line => {
+                const pts = line.pts;
+                for (let i = 0; i < pts.length; i++) {
+                    for (let j = i + 1; j < pts.length; j++) {
+                        let dc = pts[j].c - pts[i].c;
+                        let dr = pts[j].r - pts[i].r;
+                        if (dc < 0 || (dc === 0 && dr < 0)) {
+                            dc = -dc;
+                            dr = -dr;
+                        }
+                        if (dc === 0 && dr === 0) continue;
+                        const key = `${dc},${dr}`;
+                        counts.set(key, (counts.get(key) || 0) + 1);
+                    }
+                }
+            });
+
+            let bestStep = null;
+            let bestScore = -1;
+            counts.forEach((cnt, key) => {
+                if (cnt < 7) return;
+                const [dc, dr] = key.split(',').map(Number);
+                const lenSq = dc * dc + dr * dr;
+                const score = cnt / lenSq;
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestStep = { dc, dr };
+                }
+            });
+            return bestStep;
+        }
+
+        function drawParallelSegments(svg, lines, opacity = '0.45') {
+            const SVG_NS = 'http://www.w3.org/2000/svg';
+            const step = detectDominantStep(lines);
+            if (!step) return;
+
+            const normLen = Math.hypot(step.dc, step.dr) || 1;
+            const ux = (step.dc / normLen) * 28;
+            const uy = (step.dr / normLen) * 28;
+
+            lines.forEach(line => {
+                const ptSet = new Set(line.pts.map(p => `${p.r},${p.c}`));
+                line.pts.forEach(p => {
+                    const nextKey = `${p.r + step.dr},${p.c + step.dc}`;
+                    const prevKey = `${p.r - step.dr},${p.c - step.dc}`;
+                    const hasNext = ptSet.has(nextKey);
+                    const hasPrev = ptSet.has(prevKey);
+
+                    if (hasNext) {
+                        const seg = document.createElementNS(SVG_NS, 'line');
+                        seg.setAttribute('x1', p.c * 100 + 50);
+                        seg.setAttribute('y1', p.r * 100 + 50);
+                        seg.setAttribute('x2', (p.c + step.dc) * 100 + 50);
+                        seg.setAttribute('y2', (p.r + step.dr) * 100 + 50);
+                        seg.setAttribute('stroke', line.color);
+                        seg.setAttribute('stroke-width', '7');
+                        seg.setAttribute('stroke-opacity', opacity);
+                        seg.setAttribute('stroke-linecap', 'round');
+                        svg.appendChild(seg);
+                    } else if (!hasPrev) {
+                        const stub = document.createElementNS(SVG_NS, 'line');
+                        stub.setAttribute('x1', p.c * 100 + 50 - ux);
+                        stub.setAttribute('y1', p.r * 100 + 50 - uy);
+                        stub.setAttribute('x2', p.c * 100 + 50 + ux);
+                        stub.setAttribute('y2', p.r * 100 + 50 + uy);
+                        stub.setAttribute('stroke', line.color);
+                        stub.setAttribute('stroke-width', '7');
+                        stub.setAttribute('stroke-opacity', opacity);
+                        stub.setAttribute('stroke-linecap', 'round');
+                        svg.appendChild(stub);
+                    }
+                });
+            });
+        }
+
+        function renderGridLinesOverlay() {
+            const svg = document.getElementById('grid-lines-overlay');
+            svg.innerHTML = '';
+
+            if (activeIdealHighlight !== null) {
+                const parallelLines = getParallelLinesForIdeal(activeIdealHighlight);
+                drawParallelSegments(svg, parallelLines, '0.45');
+            } else if (generatedCard && generatedCard.gridPts.length > 0 && generatedCard.idealIdx !== null) {
+                // Highlight the single parallel line of the generated card using same non-Z dominant step
+                const allParallel = getParallelLinesForIdeal(generatedCard.idealIdx);
+                const step = detectDominantStep(allParallel);
+                if (!step) return;
+
+                const SVG_NS = 'http://www.w3.org/2000/svg';
+                const normLen = Math.hypot(step.dc, step.dr) || 1;
+                const ux = (step.dc / normLen) * 28;
+                const uy = (step.dr / normLen) * 28;
+                const ptSet = new Set(generatedCard.gridPts.map(p => `${p.r},${p.c}`));
+
+                generatedCard.gridPts.forEach(p => {
+                    const hasNext = ptSet.has(`${p.r + step.dr},${p.c + step.dc}`);
+                    const hasPrev = ptSet.has(`${p.r - step.dr},${p.c - step.dc}`);
+                    if (hasNext) {
+                        const seg = document.createElementNS(SVG_NS, 'line');
+                        seg.setAttribute('x1', p.c * 100 + 50);
+                        seg.setAttribute('y1', p.r * 100 + 50);
+                        seg.setAttribute('x2', (p.c + step.dc) * 100 + 50);
+                        seg.setAttribute('y2', (p.r + step.dr) * 100 + 50);
+                        seg.setAttribute('stroke', '#9333ea');
+                        seg.setAttribute('stroke-width', '7');
+                        seg.setAttribute('stroke-opacity', '0.42');
+                        seg.setAttribute('stroke-linecap', 'round');
+                        svg.appendChild(seg);
+                    } else if (!hasPrev) {
+                        const stub = document.createElementNS(SVG_NS, 'line');
+                        stub.setAttribute('x1', p.c * 100 + 50 - ux);
+                        stub.setAttribute('y1', p.r * 100 + 50 - uy);
+                        stub.setAttribute('x2', p.c * 100 + 50 + ux);
+                        stub.setAttribute('y2', p.r * 100 + 50 + uy);
+                        stub.setAttribute('stroke', '#9333ea');
+                        stub.setAttribute('stroke-width', '7');
+                        stub.setAttribute('stroke-opacity', '0.48');
+                        stub.setAttribute('stroke-linecap', 'round');
+                        svg.appendChild(stub);
+                    }
+                });
+            }
+        }
+
+        function renderIdeals() {
+            for (let i = 0; i < 8; i++) {
+                const holder = document.getElementById(`ideal-slot-${i}`);
+                if (!holder) continue;
+                holder.innerHTML = '';
+                holder.appendChild(createSlotElement('ideal', -1, -1, i, idealState[i]));
+            }
+        }
+
+        function renderPalette() {
+            const container = document.getElementById('symbol-palette-grid');
+            container.innerHTML = '';
+            const q = normalizeText(searchQuery.trim());
+
+            const filtered = SYMBOLS.filter(sym => {
+                if (paletteFilter === 'unplaced' && isSymbolOnBoard(sym.id)) return false;
+                if (!q) return true;
+                return normalizeText(sym.name).includes(q);
+            });
+
+            if (filtered.length === 0) {
+                container.innerHTML = '<div class="col-span-full text-center text-xs text-slate-400 py-6">Nincs a keresésnek megfelelő szimbólum.</div>';
+                return;
+            }
+
+            filtered.forEach(sym => {
+                const onBoard = isSymbolOnBoard(sym.id);
+                const isSelected = selectedPaletteSymId === sym.id;
+
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.draggable = true;
+                btn.title = onBoard ? `${sym.name} (a táblán — kattints a megkereséshez, vagy húzd új helyre)` : `${sym.name} (kattints vagy húzd a rácsra)`;
+                btn.ondragstart = (e) => handleDragStartPaletteSym(e, sym.id);
+                btn.onclick = () => handlePaletteItemClick(sym.id);
+
+                btn.className = `flex flex-col items-center justify-center gap-0.5 p-1.5 rounded-xl border text-center transition cursor-grab active:cursor-grabbing ${
+                    isSelected
+                        ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-400'
+                        : (onBoard
+                            ? 'bg-emerald-50/60 border-emerald-200 hover:border-emerald-400'
+                            : 'bg-white border-slate-200 hover:border-indigo-400 hover:bg-indigo-50/40')
+                }`;
+
+                btn.innerHTML = `
+                    <span class="w-7 h-7 icon-fit pointer-events-none ${onBoard ? 'opacity-80' : ''}">${sym.svg}</span>
+                    <span class="text-[10px] leading-tight font-semibold truncate w-full ${onBoard ? 'text-emerald-800' : 'text-slate-700'}">${sym.name}</span>
+                `;
+                container.appendChild(btn);
+            });
+        }
+
+        function renderPalettePickBar() {
+            const bar = document.getElementById('palette-pick-bar');
+            const chip = document.getElementById('palette-pick-chip');
+            if (selectedPaletteSymId === null) {
+                bar.classList.add('hidden');
+                return;
+            }
+            const sym = SYMBOLS[selectedPaletteSymId];
+            bar.classList.remove('hidden');
+            chip.innerHTML = `<span class="w-4 h-4 icon-fit">${sym.svg}</span><span class="font-bold text-amber-900">${sym.name}</span>`;
+        }
+
+        function renderDobbleCardElementFromSlots(slots) {
+            const cardEl = document.createElement('div');
+            cardEl.className = 'w-52 h-52 rounded-full bg-white border-[3px] border-purple-500 ring-2 ring-purple-100 shadow-md relative flex items-center justify-center shrink-0';
+
+            const layout = [
+                { dx: -4,  dy: -4,  size: 42, rot: -12 },
+                { dx: 0,   dy: -64, size: 36, rot: 14  },
+                { dx: 50,  dy: -40, size: 34, rot: -20 },
+                { dx: 62,  dy: 14,  size: 38, rot: 18  },
+                { dx: 28,  dy: 60,  size: 35, rot: -10 },
+                { dx: -28, dy: 60,  size: 37, rot: 22  },
+                { dx: -62, dy: 14,  size: 33, rot: -16 },
+                { dx: -50, dy: -40, size: 36, rot: 10  }
+            ];
+
+            slots.forEach((slot, idx) => {
+                const cfg = layout[idx];
+                const el = document.createElement('div');
+                el.style.width = `${cfg.size}px`;
+                el.style.height = `${cfg.size}px`;
+                el.style.left = `calc(50% + ${cfg.dx}px - ${cfg.size / 2}px)`;
+                el.style.top = `calc(50% + ${cfg.dy}px - ${cfg.size / 2}px)`;
+
+                if (slot.symId !== null) {
+                    const sym = SYMBOLS[slot.symId];
+                    el.title = sym.name;
+                    el.className = 'card-sym-btn absolute rounded-full flex items-center justify-center p-1';
+                    el.innerHTML = `<span class="w-full h-full icon-fit" style="transform: rotate(${cfg.rot}deg)">${sym.svg}</span>`;
+                } else {
+                    el.title = 'Üres mező a rácson ezen az egyenesen';
+                    el.className = 'absolute rounded-full flex items-center justify-center border border-dashed border-slate-300 bg-slate-50 text-xs font-bold text-slate-400';
+                    el.textContent = '?';
+                }
+                cardEl.appendChild(el);
+            });
+
+            return cardEl;
+        }
+
+        function renderGeneratedCardPanel() {
+            const chips = document.getElementById('card-pick-chips');
+            const lineBadge = document.getElementById('generated-line-badge');
+            const cardHost = document.getElementById('generated-card-container');
+            const caption = document.getElementById('generated-card-caption');
+
+            chips.innerHTML = '';
+            if (cardPick.length === 0) {
+                chips.innerHTML = '<span class="text-sky-600/75 italic">Kattints 2 jelre a táblán...</span>';
+            } else {
+                cardPick.forEach(p => {
+                    const sym = SYMBOLS[p.symId];
+                    const badge = document.createElement('span');
+                    badge.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-sky-300 text-xs font-semibold text-slate-700';
+                    badge.title = sym.name;
+                    badge.innerHTML = `<span class="w-4 h-4 icon-fit">${sym.svg}</span><span>${sym.name}</span>`;
+                    chips.appendChild(badge);
+                });
+            }
+
+            cardHost.innerHTML = '';
+            if (!generatedCard) {
+                lineBadge.textContent = '';
+                cardHost.innerHTML = '<div class="w-52 h-52 rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-xs text-slate-400 text-center px-6 leading-relaxed">Kattints bármelyik 2 szimbólumra a táblán a hozzájuk tartozó Dobble kártya legenerálásához</div>';
+                caption.textContent = '';
+                return;
+            }
+
+            const filledCnt = generatedCard.slots.filter(s => s.symId !== null).length;
+            lineBadge.textContent = generatedCard.lineLabel;
+            cardHost.appendChild(renderDobbleCardElementFromSlots(generatedCard.slots));
+            caption.innerHTML = filledCnt === 8
+                ? '<span class="text-emerald-700 font-semibold">8 / 8 szimbólum — teljes Dobble kártya legenerálva a rács egyeneséről!</span>'
+                : `<span class="text-amber-700 font-semibold">${filledCnt} / 8 szimbólum van jelenleg lerakva ezen az egyenesen.</span>`;
+        }
+    </script>
+</body>
+</html>

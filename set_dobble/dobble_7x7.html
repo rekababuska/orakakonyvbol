@@ -57,7 +57,7 @@
 <body class="min-h-screen flex flex-col p-2 sm:p-4 md:p-5 bg-slate-50">
 
     <!-- HEADER -->
-    <header class="max-w-7xl mx-auto w-full mb-3">
+    <header class="max-w-[1400px] mx-auto w-full mb-3">
         <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pb-3 border-b border-slate-200">
             <div>
                 <div class="flex items-center gap-2.5 flex-wrap">
@@ -97,7 +97,7 @@
     </header>
 
     <!-- MAIN WORKSPACE -->
-    <main class="max-w-7xl mx-auto w-full grid grid-cols-1 xl:grid-cols-12 gap-4 items-start flex-grow">
+    <main class="max-w-[1400px] mx-auto w-full grid grid-cols-1 xl:grid-cols-12 gap-4 items-start flex-grow">
 
         <!-- LEFT: 7x7 GRID + 8 IDEAL POINTS + LINE OVERLAY -->
         <section class="xl:col-span-7 bg-white border border-slate-200 rounded-2xl p-3 sm:p-4 shadow-sm flex flex-col items-center">
@@ -1282,17 +1282,17 @@
         // organic varied symbol sizes and playful tilts just like real printed Dobble cards!
         function renderDobbleCardElement(symbols, clickHandler, highlightPlaced = false) {
             const cardEl = document.createElement('div');
-            cardEl.className = 'w-48 h-48 rounded-full bg-white border-[3px] border-purple-500 ring-2 ring-purple-100 shadow-md relative flex items-center justify-center shrink-0';
+            cardEl.className = 'w-[232px] h-[232px] rounded-full bg-white border-[3px] border-purple-500 ring-2 ring-purple-100 shadow-md relative flex items-center justify-center shrink-0';
 
             const layout = [
-                { dx: -4,  dy: -4,  size: 40, rot: -12 },
-                { dx: 0,   dy: -58, size: 34, rot: 14  },
-                { dx: 45,  dy: -36, size: 32, rot: -20 },
-                { dx: 56,  dy: 14,  size: 36, rot: 18  },
-                { dx: 26,  dy: 54,  size: 33, rot: -10 },
-                { dx: -26, dy: 54,  size: 35, rot: 22  },
-                { dx: -56, dy: 14,  size: 31, rot: -16 },
-                { dx: -45, dy: -36, size: 34, rot: 10  }
+                { dx: -3,  dy: -4,  size: 56, rot: -10 },
+                { dx: 0,   dy: -72, size: 46, rot: 14  },
+                { dx: 56,  dy: -46, size: 44, rot: -18 },
+                { dx: 68,  dy: 16,  size: 48, rot: 16  },
+                { dx: 34,  dy: 68,  size: 45, rot: -10 },
+                { dx: -34, dy: 68,  size: 47, rot: 20  },
+                { dx: -68, dy: 16,  size: 43, rot: -15 },
+                { dx: -56, dy: -46, size: 46, rot: 10  }
             ];
 
             symbols.forEach((symId, idx) => {
@@ -1304,7 +1304,7 @@
                 const btn = document.createElement('button');
                 btn.type = 'button';
                 btn.title = onBoard ? `${sym.name} (már a táblán van)` : sym.name;
-                btn.className = `card-sym-btn absolute rounded-full flex items-center justify-center p-1 border ${
+                btn.className = `card-sym-btn absolute rounded-full flex items-center justify-center p-0.5 border ${
                     isPicked
                         ? 'card-sym-selected'
                         : (onBoard ? 'bg-emerald-50/90 border-emerald-300 opacity-50' : 'bg-transparent border-transparent hover:bg-sky-50 hover:border-sky-300')
@@ -1402,13 +1402,13 @@
             if (viewerCards[0]) {
                 slot1.appendChild(renderDobbleCardElement(viewerCards[0].symbols, handleViewerSymbolClick, phase === 3 && !isShowcase));
             } else {
-                slot1.innerHTML = '<div class="w-48 h-48 rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-xs text-slate-400 text-center px-5">Kattints 2 szimbólumra a táblán</div>';
+                slot1.innerHTML = '<div class="w-[232px] h-[232px] rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-xs text-slate-400 text-center px-6">Kattints 2 szimbólumra a táblán</div>';
             }
 
             if (viewerCards[1]) {
                 slot2.appendChild(renderDobbleCardElement(viewerCards[1].symbols, handleViewerSymbolClick, phase === 3 && !isShowcase));
             } else {
-                slot2.innerHTML = '<div class="w-48 h-48 rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-xs text-slate-400 text-center px-5">Az előző kártya ide kerül</div>';
+                slot2.innerHTML = '<div class="w-[232px] h-[232px] rounded-full border-2 border-dashed border-slate-200 flex items-center justify-center text-xs text-slate-400 text-center px-6">Az előző kártya ide kerül</div>';
             }
         }
 
